@@ -1,0 +1,56 @@
+{
+  "output": "../../build/papers/papers.pptx",
+  "cover": false,
+  "slides": [
+    {
+      "type": "paper",
+      "title": "Paper A",
+      "full_title": "Paper A: Occlusion-Aware Hand Pose Estimation with Temporal Priors",
+      "venue": "CVPR 2025",
+      "pipeline": "../demo/figures/pipeline.png",
+      "problem": "Hand pose breaks when fingers are occluded",
+      "approach": "Carries the previous pose forward as a prior",
+      "novelty": ["Temporal prior gated by joint visibility", "Needs no extra sensors"],
+      "limitations": ["Drifts after long occlusions", "Tested on one camera setup only"],
+      "takeaway": "A cheap fix for short occlusions, not long ones",
+      "notes": ["Spoken: the prior is the previous pose, trusted less when a joint is hidden.",
+                "Spoken: the long-occlusion drift is the gap our fusion work targets."]
+    },
+    {
+      "type": "paper",
+      "title": "Paper B",
+      "full_title": "Paper B: Fusing EMG and Vision for Robust Hand Tracking",
+      "venue": "ICRA 2025",
+      "pipeline": "../demo/figures/pipeline.png",
+      "problem": "Vision-only tracking fails under heavy occlusion",
+      "approach": "Fuses wearable EMG features with image features",
+      "novelty": ["Per-joint fusion weights", "Subject-adaptive EMG encoder"],
+      "limitations": ["Needs per-user calibration"]
+    },
+    {
+      "type": "compare",
+      "theme": "Occlusion-robust hand pose",
+      "methods": {
+        "header": ["Paper", "Input", "Key idea", "Extra cost"],
+        "rows": [
+          ["Paper A", "RGB video", "Temporal prior", "None"],
+          ["Paper B", "RGB + EMG", "Per-joint fusion", "Armband"],
+          ["Paper C", "Depth", "Part-based visibility", "Depth camera"],
+          ["Paper D", "RGB", "Synthetic occlusions", "Training time"]
+        ],
+        "takeaway": "Methods differ mainly in the extra signal they bring"
+      },
+      "results": {
+        "header": ["Paper", "MAE ↓", "Occluded MAE ↓", "FPS ↑"],
+        "rows": [
+          ["Paper A", "8.1°", "12.4°", "60"],
+          ["Paper B", "7.1°", "9.6°", "45"],
+          ["Paper C", "7.6°", "10.8°", "30"],
+          ["Paper D", "8.4°", "13.0°", "60"]
+        ],
+        "takeaway": "Extra sensing helps most when fingers are hidden",
+        "note": "Synthetic numbers for this example; occluded subset of a shared benchmark"
+      }
+    }
+  ]
+}

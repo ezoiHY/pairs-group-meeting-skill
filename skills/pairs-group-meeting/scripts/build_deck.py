@@ -55,6 +55,7 @@ LIST_W = 8890000                       # width of the template's Done/Todo text 
 FULL_W = SLIDE_W - 2 * MARGIN_X
 GAP = int(0.2 * EMU_PER_IN)
 COL_GAP = int(0.35 * EMU_PER_IN)
+WIDE_FIGURE = 2.6                      # width/height from which a figure is larger under the text than beside it
 
 # Colors from the template.
 NAVY = "002147"        # body text
@@ -83,7 +84,8 @@ VIDEO_MIME = {".mp4": "video/mp4", ".m4v": "video/x-m4v", ".mov": "video/quickti
 WARNINGS = []
 
 # House style; config.json "style" overrides these.
-STYLE = {"language": "en", "min_font_size": 22, "max_bullets_per_slide": 3, "max_words_per_bullet": 14}
+STYLE = {"language": "en", "min_font_size": 22, "max_bullets_per_slide": 3, "max_words_per_bullet": 14,
+         "max_compare_papers": 5, "max_compare_columns": 5}
 
 
 def warn(msg):
@@ -829,6 +831,9 @@ def fill_content(slide, s, base_dir, work):
     media = [prepare_media(m, base_dir, work) for m in s.get("media", [])]
     table = s.get("table")
     layout = s.get("layout", "auto")
+    if layout == "fit":
+        # Figure-led slide: a wide figure gets the full width under the text, a squarer one sits beside it.
+        layout = "stack" if media and all(m["aspect"] >= WIDE_FIGURE for m in media) else "auto"
     if layout == "auto":
         layout = "text-left" if bullets and media and not table else "stack"
 
@@ -955,15 +960,144 @@ def lint(s):
             warn(f"{where}: item over {limit} words — {long!r}")
 
 
+def as_list(value):
+    if value is None or value == "":
+        return []
+    return [value] if isinstance(value, str) else list(value)
+
+
+def paper_slides(s):
+    """One paper -> two content slides: pipeline + problem/approach, then novelty | limitations."""
+    name = s.get("title") or s.get("name")
+    if not name:
+        raise SystemExit("every paper slide needs a short \"title\" (the paper's name)")
+    where = f"paper '{name}'"
+    problem, approach = s.get("problem"), s.get("approach")
+    novelty, limits = as_list(s.get("novelty")), as_list(s.get("limitations"))
+    needed = (("the original pipeline figure", s.get("pipeline")), ("the problem it solves", problem),
+              ("how it solves it", approach), ("the novelty", novelty), ("the limitations", limits))
+    missing = [label for label, value in needed if not value]
+    if missing:
+        warn(f"{where}: missing {', '.join(missing)} — ask the user for them, don't fill them in yourself")
+    notes = as_list(s.get("notes"))
+
+    bullets = [f"**{label}:** {text}" for label, text in (("Problem", problem), ("Approach", approach)) if text]
+    first = {"type": "content", "title": f"Paper reading: {name}", "bullets": bullets, "layout": "fit",
+             "text_only": not s.get("pipeline")}
+    if s.get("full_title"):
+        first["subtitle"] = s["full_title"]
+    if s.get("pipeline"):
+        first["media"] = [{"path": s["pipeline"], "caption": s.get("pipeline_caption", "")}]
+    source = [t for t in (s.get("venue"), "pipeline figure from the paper" if s.get("pipeline") else None) if t]
+    if source:
+        first["footnote"] = " · ".join(source)
+    first.update({k: s[k] for k in ("layout", "text_width") if k in s})
+    if notes:
+        first["notes"] = notes[0]
+    out = [first]
+
+    columns = [(head, items) for head, items in (("Novelty", novelty), ("Limitations", limits)) if items]
+    if columns:
+        for head, items in columns:
+            if len(items) > 2:
+                warn(f"{where}: {len(items)} {head.lower()} — keep the two that matter most")
+        long = next((t for _, items in columns for t in items if words(t) > STYLE["max_words_per_bullet"]), None)
+        if long:
+            warn(f"{where}: point over {STYLE['max_words_per_bullet']} words — {long!r}")
+        count = max(len(items) for _, items in columns)
+        rows = [[items[i] if i < len(items) else "" for _, items in columns] for i in range(count)]
+        second = {"type": "content", "title": f"{name}: novelty and limits", "text_only": True, "valign": "middle",
+                  "table": {"header": [head for head, _ in columns], "rows": rows,
+                            "col_widths": [1] * len(columns), "align": ["left"] * len(columns)}}
+        if s.get("takeaway"):
+            second["subtitle"] = s["takeaway"]
+        if len(notes) > 1:
+            second["notes"] = notes[1]
+        out.append(second)
+    return out
+
+
+NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
+
+
+def bold_best(table):
+    """Rows of a results table with the best value of each column bold (from ↓/↑ in the header, or `better`)."""
+    header = [cell_spec(c)["text"] for c in table.get("header", [])]
+    rows = [list(r) for r in table["rows"]]
+    better = table.get("better") or []
+    for j in range(max(len(r) for r in rows)):
+        rule = better[j] if j < len(better) else None
+        if rule is None and j < len(header):
+            rule = "lower" if "↓" in header[j] else "higher" if "↑" in header[j] else None
+        if rule not in ("lower", "higher"):
+            continue
+        found = []
+        for i, r in enumerate(rows):
+            hit = NUMBER_RE.search(cell_spec(r[j])["text"]) if j < len(r) else None
+            if hit:
+                found.append((float(hit.group()), i))
+        if not found:
+            continue
+        best = (min if rule == "lower" else max)(v for v, _ in found)
+        for v, i in found:
+            if v == best:
+                rows[i][j] = dict(cell_spec(rows[i][j]), bold=True)
+    return rows
+
+
+def compare_slides(s):
+    """One theme's papers -> a methods table slide, then a results table slide. Tables only, no figures."""
+    theme = s.get("theme") or s.get("title")
+    if not theme:
+        raise SystemExit("every compare slide needs a \"theme\" (the group of papers it compares)")
+    where = f"comparison '{theme}'"
+    methods, results = s.get("methods"), s.get("results")
+    if not methods or not methods.get("rows"):
+        raise SystemExit(f"{where}: needs a \"methods\" table — compare how the papers work before their results")
+    if not results or not results.get("rows"):
+        warn(f"{where}: no results table — ask the user for the numbers on a shared benchmark")
+    notes = as_list(s.get("notes"))
+
+    out = []
+    for kind, t in (("methods", methods), ("results", results)):
+        if not t or not t.get("rows"):
+            continue
+        ncols = max(len(r) for r in ([t.get("header", [])] + list(t["rows"])))
+        if len(t["rows"]) > STYLE["max_compare_papers"]:
+            warn(f"{where} {kind}: {len(t['rows'])} papers — keep {STYLE['max_compare_papers']} or fewer per "
+                 "theme, or split the theme")
+        if ncols > STYLE["max_compare_columns"]:
+            warn(f"{where} {kind}: {ncols} columns — keep {STYLE['max_compare_columns']} or fewer "
+                 "(paper name + the few dimensions that matter)")
+        table = {k: t[k] for k in ("header", "col_widths", "font_size") if k in t}
+        table["rows"] = bold_best(t) if kind == "results" else t["rows"]
+        table["align"] = t.get("align") or (["left"] * ncols if kind == "methods" else ["left"] + ["center"] * (ncols - 1))
+        slide = {"type": "content", "title": f"Compare: {theme} — {kind}", "table": table, "text_only": True}
+        if t.get("takeaway"):
+            slide["subtitle"] = t["takeaway"]
+        if kind == "results":
+            if t.get("note"):
+                slide["footnote"] = t["note"]
+            else:
+                warn(f"{where} results: no \"note\" — say which benchmark and setting the numbers come from")
+        if len(notes) > len(out):
+            slide["notes"] = notes[len(out)]
+        out.append(slide)
+    return out
+
+
 def expand_slides(spec, cfg):
-    slides = [dict(s) for s in spec["slides"]]
+    slides = []
+    for s in spec["slides"]:
+        kind = s.get("type", "content")
+        slides.extend(paper_slides(s) if kind == "paper" else compare_slides(s) if kind == "compare" else [dict(s)])
     if not any(s.get("type") == "cover" for s in slides) and spec.get("cover", True) is not False:
         slides.insert(0, {"type": "cover"})
     planned = []
     for s in slides:
         kind = s.get("type", "content")
         if kind not in BASE_SLIDE:
-            raise SystemExit(f"unknown slide type {kind!r}; use cover, done, content or todo")
+            raise SystemExit(f"unknown slide type {kind!r}; use cover, done, content, paper, compare or todo")
         s["type"] = kind
         if kind == "cover":
             day = parse_date(s["date"]) if s.get("date") else datetime.date.today()

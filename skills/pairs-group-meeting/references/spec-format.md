@@ -82,7 +82,7 @@ least `style.min_font_size` (22pt); only the title (36pt) and the footnote (12pt
 | `media` | Strings (paths), `{"path", "caption", "poster", "page"}`, or `{"chart": {…}, "caption", "aspect"}`. Images: png, jpg, gif, bmp, tif, webp. `pdf` and `svg` are rasterized at 220 dpi (`page` picks a PDF page, default 1). Videos: mp4, m4v, mov, avi, wmv — embedded and playable in PowerPoint; the poster frame comes from macOS Quick Look unless `poster` names an image. Captions are 22pt, centered under the item — keep them to ≤ 8 words. |
 | `media[].chart` | A native, editable PowerPoint chart, laid out like an image (default `aspect` 1.6). `type`: `bar` (columns), `hbar`, `line`. `categories`: x labels. `series`: `[{"name", "values", "color"?}]` — a legend appears for 2+ series. `number_format`: Excel format for labels, e.g. `"0.0"`, `"0%"`, `"0.0\"°\""`. `labels` (default on for bars, off for lines): value labels, which also hide the value axis. `highlight`: category names drawn in the template's gold (single-series bars) — use it for "ours". `y_min` / `y_max`: axis range. |
 | `media_rows` | Force the number of media rows. Default: the row count that makes the media largest. |
-| `layout` | `auto` (default), `text-left`, `text-right`, `stack`. `auto` = `text-left` when there are bullets and media but no table, else `stack`. |
+| `layout` | `auto` (default), `text-left`, `text-right`, `stack`, `fit`. `auto` = `text-left` when there are bullets and media but no table, else `stack`. `fit` = `stack` when every media item is wide (width/height ≥ 2.6), else `auto` — for figure-led slides such as a paper's pipeline. |
 | `text_width` | Bullet column share for `text-left` / `text-right` (default `0.38`). |
 | `footnote` | Small gray 12pt line at bottom left, beside the logos — citations, data sources only. |
 | `text_only` | `true` silences the "no figure, demo video or chart" warning, for a genuine discussion slide. |
@@ -92,6 +92,71 @@ How `stack` places things, top to bottom: subtitle → bullets (≤45% of the he
 blocks follow) → table (≤55% when media follow) → media in the remaining space. Media alone are
 centered vertically; otherwise they start right under the block above. In `text-left` /
 `text-right`, bullets get their own column and the table and media stack in the other column.
+
+## `paper`
+
+One paper, expanded by the builder into two `content` slides: the paper's pipeline figure with
+its problem and approach, then its novelty and limitations side by side.
+
+```json
+{"type": "paper", "title": "Paper A", "venue": "CVPR 2025",
+ "full_title": "Paper A: Occlusion-Aware Hand Pose Estimation with Temporal Priors",
+ "pipeline": "figs/paper_a_fig2.png",
+ "problem": "Hand pose breaks when fingers are occluded",
+ "approach": "Carries the previous pose forward as a prior",
+ "novelty": ["Temporal prior gated by joint visibility", "Needs no extra sensors"],
+ "limitations": ["Drifts after long occlusions", "One camera setup only"],
+ "takeaway": "A cheap fix for short occlusions, not long ones",
+ "notes": ["Spoken explanation for slide 1", "Spoken explanation for slide 2"]}
+```
+
+| Key | Notes |
+|---|---|
+| `title` | Required. The paper's short name; slide titles are `Paper reading: <title>` and `<title>: novelty and limits`. |
+| `full_title` | Subtitle of the first slide. |
+| `venue` | Footnote of the first slide, followed by `· pipeline figure from the paper`. |
+| `pipeline` | The authors' original pipeline figure: any `media` path (image, or `pdf` / `svg` rasterized). Required — the build warns without it. |
+| `pipeline_caption` | Optional caption, ≤ 8 words. |
+| `problem`, `approach` | One short line each, shown as `**Problem:** …` and `**Approach:** …` beside (or above) the figure. Required. |
+| `novelty`, `limitations` | A string or a list; at most 2 points of ≤ `style.max_words_per_bullet` words each. They fill the two columns of the second slide, row by row. Required; a missing one drops its column. |
+| `takeaway` | Optional subtitle of the second slide. |
+| `notes` | A string (first slide) or a list of up to two strings (one per slide). |
+| `layout`, `text_width` | Override the first slide's layout (default `fit`, see `content`). |
+
+Missing fields are never invented: the build warns `missing …`, and the slides come out without them.
+
+## `compare`
+
+One theme's papers, expanded into two `content` slides that hold only tables: how the methods
+differ, then how the results differ. Methods come first; compare them before the numbers.
+
+```json
+{"type": "compare", "theme": "Occlusion-robust hand pose",
+ "methods": {"header": ["Paper", "Input", "Key idea", "Extra cost"],
+             "rows": [["Paper A", "RGB video", "Temporal prior", "None"],
+                      ["Paper B", "RGB + EMG", "Per-joint fusion", "Armband"]],
+             "takeaway": "Methods differ mainly in the extra signal they bring"},
+ "results": {"header": ["Paper", "MAE ↓", "Occluded MAE ↓", "FPS ↑"],
+             "rows": [["Paper A", "8.1°", "12.4°", "60"], ["Paper B", "7.1°", "9.6°", "45"]],
+             "takeaway": "Extra sensing helps most when fingers are hidden",
+             "note": "Occluded subset of <benchmark>; numbers as reported in each paper"},
+ "notes": ["Spoken, methods slide", "Spoken, results slide"]}
+```
+
+| Key | Notes |
+|---|---|
+| `theme` | Required. Slide titles are `Compare: <theme> — methods` and `Compare: <theme> — results`. |
+| `methods`, `results` | Each a `content` table — `header`, `rows`, optional `col_widths`, `align`, `font_size` (see `content`) — plus `takeaway` (the slide's subtitle). `methods` is required; without `results` the build warns. One row per paper, the paper's name in the first column. |
+| `results.note` | The slide's footnote: the benchmark and setting, and whether numbers are as reported. The build warns without it. |
+| `results.better` | Optional per-column `"lower"` / `"higher"` / `null`, overriding the header's arrows. By default a `↓` in the header means lower is better, `↑` higher. |
+| `notes` | A string (methods slide) or a list of up to two strings (methods, results). |
+
+The best value of each column that has a `↓` / `↑` (or a `better` entry) is bolded automatically,
+ties included; a cell is read by its first number (`7.1°` → 7.1), and cells with no number are
+skipped. Methods cells are left-aligned; results cells are centered except the first column.
+The build warns above `style.max_compare_papers` rows (default 5) or `style.max_compare_columns`
+columns (default 5) — split the theme or drop columns. There are no figures here; use `content`
+for those.
 
 ## A complete example
 
@@ -110,10 +175,13 @@ centered vertically; otherwise they start right under the block above. In `text-
      "media": [{"path": "figs/mae_curve.png", "caption": "Validation MAE per epoch"}]},
     {"type": "content", "title": "Demo", "media": [
       {"path": "videos/fusion_demo.mp4", "caption": "Occluded grasp, fusion output"}]},
-    {"type": "content", "title": "Paper reading: UniHOPE",
-     "subtitle": "UniHOPE: A Unified Approach for Hand-Only and Hand-Object Pose Estimation",
-     "bullets": ["Unifies hand-only and hand-object pose estimation", "Switches between the two adaptively"],
-     "media": ["figs/unihope_fig2.png"], "footnote": "CVPR 2025"},
+    {"type": "paper", "title": "Paper A", "venue": "CVPR 2025",
+     "full_title": "Paper A: Occlusion-Aware Hand Pose Estimation with Temporal Priors",
+     "pipeline": "figs/paper_a_fig2.png",
+     "problem": "Hand pose breaks when fingers are occluded",
+     "approach": "Carries the previous pose forward as a prior",
+     "novelty": ["Temporal prior gated by joint visibility"],
+     "limitations": ["Drifts after long occlusions"]},
     {"type": "todo", "projects": [
       {"name": "Vision-EMG", "items": ["Multi-subject collection by 11.05", "First paper draft"]}]}
   ]

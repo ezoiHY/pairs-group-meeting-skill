@@ -63,7 +63,8 @@ Rendered by PowerPoint from [`examples/demo/spec.json`](examples/demo/spec.json)
 | Cover | "Group Meeting", date, presenter — the template cover |
 | Done last two weeks | Items grouped by project, lettered `a. b. c.`, status in green (**done**) or red (**on-going**) |
 | Results | A one-line takeaway, up to 3 short bullets, and figures / embedded demo videos / native PowerPoint charts |
-| Paper reading | Paper title, a key figure, 2–3 points, citation footnote |
+| Paper reading | Per paper: the authors' original pipeline figure with its problem and approach, then novelty and limitations side by side — all supplied by you, never guessed |
+| Paper comparison | Per theme of 3–5 papers: a methods table, then a results table (best value bolded) — tables only, no figures. Example: [`examples/papers/spec.json`](examples/papers/spec.json) (synthetic) |
 | Todo | Next steps per project |
 
 Every slide is cloned from the template, so the background, header band and HKUST(GZ) / PAIRS Lab
@@ -78,7 +79,7 @@ warns about the rest:
 - **All English** — notes written in Chinese are translated.
 - **Body text ≥ 22pt** — text is never shrunk below it; the slide gets cut or split instead.
 - **Few words, key sentences** — a one-line takeaway plus ≤ 3 bullets of ≤ 14 words.
-- **Show it** — every results slide has a figure, demo video or chart.
+- **Show it** — every results slide has a figure, demo video or chart (paper-comparison slides are the exception: tables only).
 
 ## Requirements
 
@@ -139,6 +140,105 @@ python skills/pairs-group-meeting/scripts/render.py build/demo/261029GroupMeetin
 The spec format is documented in [`references/spec-format.md`](skills/pairs-group-meeting/references/spec-format.md);
 [`examples/demo/spec.json`](examples/demo/spec.json) builds the deck shown above.
 
+## 组会汇报怎么做
+
+这一节说明：用这个 skill 做一次组会汇报，你要准备什么、PPT 怎么排、论文怎么讲。
+PPT 本身是全英文的，你对 Claude 说中文、贴中文笔记都可以，它会翻译。
+
+### 1. 整体流程
+
+1. 对 Claude Code 说一句话：会议日期、这两周做了什么、结果图和 demo 视频的路径（见上面 Use 里的例子）。
+2. Claude 一次性问清缺的东西：哪些结果还没有图、论文还缺哪几项、上次的 Todo 哪些做完了。
+3. 它写出 `deck_spec.json`，构建 `.pptx`，用 PowerPoint 渲染每一页并检查，然后交给你。
+4. 想改的话，直接改 `deck_spec.json` 再重新构建：
+
+   ```bash
+   python skills/pairs-group-meeting/scripts/build_deck.py <output_root>/<YYMMDD>GroupMeeting/deck_spec.json
+   ```
+
+   如果提示找不到 pptx skill，加上 `--pptx-skill <pptx skill 的目录>`。
+
+### 2. 一场组会的 PPT 怎么排
+
+| 顺序 | 页 | 内容 |
+|---|---|---|
+| 1 | Cover | 日期和你的名字 |
+| 2 | Done last two weeks | 按项目分组，每条标 done 或 on-going |
+| 3 | Results | 一页一个结论，配图 / 图表 / demo 视频，数量按工作量定 |
+| 4 | Paper reading | 可选。每篇论文 2 页 |
+| 5 | Paper comparison | 可选。读了 2 篇以上才有，放在论文之后 |
+| 6 | Todo | 下两周要做的事 |
+
+一般 8–14 页，每页讲 1.5–2 分钟。
+
+### 3. 你需要准备什么
+
+| 部分 | 要给 Claude 的东西 |
+|---|---|
+| Done | 上次组会以来做了什么，按项目分组，哪些完成、哪些还在做。Claude 会读上一次 PPT 的 Todo，当作这次 Done 的候选 |
+| Results | 每个结果的图、截图或 demo 视频，加一句你想让大家记住的结论。只有数字也行，会做成图表 |
+| Todo | 下两周的计划，有截止日期就写上 |
+| 论文 | 见下面两节 |
+
+### 4. 讲一篇论文
+
+每篇论文你要给齐五样东西，缺哪样 Claude 就问哪样，**不会替你补**：
+
+1. **原版 pipeline 图**：论文自己的方法总览图（图片，或 PDF 加页码），不要自己重画
+2. **要解决什么问题**（Problem）
+3. **怎么解决的**（Approach）
+4. **创新点**（Novelty）
+5. **不足**（Limitations）：这是你自己的判断，不要让 Claude 替你写。想不出来就想想"它在什么情况下会失效"：要额外传感器、只测了一个数据集、需要逐人标定……
+
+每篇论文生成 2 页：
+
+- 第 1 页：pipeline 图，旁边两句 Problem 和 Approach
+- 第 2 页：Novelty 和 Limitations 左右两栏，每栏最多 2 条
+
+你口头讲的详细解释会放进这两页的 speaker notes，页面上只留每行不超过 14 个词的短句。
+
+讲的时候的建议（来自常见的 journal club / reading group 做法）：
+
+- 先讲问题，再顺着 pipeline 图从输入讲到输出，不要把论文的图一张张过一遍
+- 创新点只讲和前人相比真正新的那一两点
+- 以不足和你自己的看法收尾，最好给大家抛一个具体的问题
+
+### 5. 对比几篇论文
+
+读了 2 篇以上时，按**主题**分组，每组 3–5 篇，每组生成两页，**只有表格，没有图**：
+
+1. **方法表**（先比方法）：每行一篇论文，第一列是论文名，后面只放能区分这几篇的维度，比如输入、核心想法、额外成本
+2. **结果表**（再比结果）：每行一篇论文，数字放在同一个基准数据集上。表头写 ↓ 或 ↑，每列最好的值会自动加粗
+
+注意：
+
+- 表格下方的脚注要写清楚基准数据集和设置，以及数字是不是论文自己报告的（as reported）。设置不同的数字不要硬比，对不上的格子写 `—`
+- 数字必须来自你，Claude 不会编
+- 一组最多 5 篇、5 列，超过会警告，这时拆成两个主题，或者删掉区分度不大的列
+
+### 6. 写 PPT 的规矩
+
+- **全英文**：标题、要点、表格、图注都是英文，专有名词保持原样（MAE、TCN、HaMeR）
+- **正文不小于 22pt**：放不下就删字或拆页，不缩字号
+- **少字**：一页一个结论，一行副标题讲结论，最多 3 条要点，每条不超过 14 个词
+- **结果页要有图**：图、图表或 demo 视频；论文对比页是例外，只放表格
+- **细节放 notes**：想多讲的话写在 speaker notes 里，不要塞进页面
+
+### 7. 构建时的 WARNING
+
+构建结束会打印 WARNING，每一条都要处理，Claude 会照着改：缺图缺字段会回来问你，要点太长会让你缩短或拆页，
+论文对比超过 5 篇会建议拆主题。完整的警告和处理办法见 [`SKILL.md`](skills/pairs-group-meeting/SKILL.md)。
+
+### 8. 一个完整的例子
+
+> 帮我做 11.12 组会的 PPT。这两周 Vision-EMG 采完了 3 个人的数据，融合模型遮挡下 MAE 从 14.9° 降到 9.6°，
+> 结果图在 ~/figs/mae.png。读了两篇论文：
+> A（CVPR 2025）要解决遮挡下手部姿态估计失效，用上一帧姿态做先验，创新是按关节可见性给先验加权，不足是长时间遮挡会漂移，pipeline 图在 ~/papers/a_fig2.png；
+> B（ICRA 2025）用 EMG 和视觉融合，创新是每个关节单独学融合权重，不足是每个人都要标定，pipeline 图在 ~/papers/b_fig2.png。
+> 两篇一起比一下，MAE 和遮挡下 MAE 的数字在 ~/papers/results.md。下两周采完剩下 2 人。
+
+示例 spec 见 [`examples/papers/spec.json`](examples/papers/spec.json)（数据是虚构的）。
+
 ## Layout
 
 ```
@@ -151,6 +251,7 @@ skills/pairs-group-meeting/
   references/                spec format, template geometry/colors/fonts
   config.json                presenter, output folder, house-style limits
 examples/demo/               a demo spec with synthetic data
+examples/papers/             paper-reading and paper-comparison slides, synthetic data
 ```
 
 The template, its backgrounds and the HKUST(GZ) and PAIRS Lab logos belong to their owners.

@@ -1,6 +1,6 @@
 ---
 name: pairs-group-meeting
-description: Make PAIRS Lab (HKUST-GZ) group-meeting slides — 组会PPT / 组会汇报 — as a .pptx built on the lab's own template, with the cover, "Done last two weeks" progress list with done/on-going status, results slides with figures, demo videos and tables, paper-reading slides, and the Todo list. Use this whenever the user wants slides for a group meeting, lab meeting, weekly or biweekly progress report, or 组会, or asks to turn progress notes, experiment results, plots or videos into meeting slides, even if they don't mention the template or PowerPoint. It drives the pptx skill for the actual file generation and QA.
+description: Make PAIRS Lab (HKUST-GZ) group-meeting slides — 组会PPT / 组会汇报 — as a .pptx built on the lab's own template, with the cover, "Done last two weeks" progress list with done/on-going status, results slides with figures, demo videos and tables, paper-reading slides (the paper's own pipeline figure plus problem, approach, novelty, limitations), multi-paper comparison tables, and the Todo list. Use this whenever the user wants slides for a group meeting, lab meeting, weekly or biweekly progress report, or 组会, or asks to turn progress notes, experiment results, plots or videos into meeting slides, even if they don't mention the template or PowerPoint. It drives the pptx skill for the actual file generation and QA.
 ---
 
 # PAIRS Lab group-meeting deck
@@ -51,7 +51,27 @@ What a group-meeting deck needs, and what to ask for if the user hasn't said:
   each should land. Visuals carry these decks, so for every result ask for a plot, screenshot or
   demo video if the user didn't give one. Numbers alone can become a native `chart`.
 - **Todo**: next steps per project, with deadlines if known.
-- Optional: a paper they read (title, venue, a key figure, 2–4 points).
+- **Papers they read** (optional; one block per paper). A paper gets slides only when the user
+  supplies all of this — ask for whatever is missing, and never fill a gap from the abstract or
+  your own knowledge, least of all the limitations:
+  1. Short name, full title, venue and year.
+  2. The paper's **original pipeline figure**: the authors' own overview/method figure, as an image
+     or as a PDF plus page number. Don't redraw it or swap in a diagram you made.
+  3. **Problem** — what the paper sets out to solve.
+  4. **Approach** — how it solves it.
+  5. **Novelty** — what is new compared with earlier work.
+  6. **Limitations** — where it falls short. This is the presenter's own judgment; if they have
+     none yet, ask what would break it (extra sensors, one dataset, calibration, speed…).
+
+  Answers may come loosely, in 中文. Compress each to short English — Problem and Approach one
+  line each, Novelty and Limitations at most two points each, every line ≤ 14 words — and put the
+  fuller explanation in the slide's speaker `notes`.
+- **Comparing papers** (when they read two or more): group the papers into themes of 3–5 and
+  ask for, per theme: a theme name; the few method dimensions that actually separate the papers
+  (input or data, key idea, supervision, extra cost…); and each paper's numbers on one shared
+  benchmark and metric, with where they come from (as reported in the paper, or re-run). Compare
+  like with like: if two papers report on different benchmarks or settings, say so or leave the
+  cell as `—`. Never invent a number.
 
 **Look at the previous deck.** Find the newest earlier deck in `output_root` (from `config.json`):
 usually a `YYMMDDGroupMeeting/` folder, but older decks may be named differently (`260930组会.pptx`).
@@ -73,8 +93,13 @@ The lab's standard order, which the template is built around:
 2. **Done** — `Done last two weeks`. Add the period, `Done last two weeks (10.15–10.29)`, only when
    you know the previous meeting's date (from the previous deck or the user); don't invent one.
 3. **Results / progress** — one message per slide, as many as the work needs.
-4. **Paper reading** (optional) — `Paper reading: <short name>`, full title as subtitle, venue as footnote.
-5. **Todo**.
+4. **Paper reading** (optional) — one `paper` entry per paper, which becomes two slides:
+   `Paper reading: <short name>` (full title as subtitle, the original pipeline figure, Problem and
+   Approach, venue as footnote) and `<short name>: novelty and limits` (two columns).
+5. **Paper comparison** (only with two or more papers, after the papers themselves) — one `compare`
+   entry per theme, which becomes `Compare: <theme> — methods`, then `Compare: <theme> — results`.
+   Methods first, results second, tables only.
+6. **Todo**.
 
 ## House style (the lab's defaults — follow them)
 
@@ -106,6 +131,14 @@ the rest.
 - **Done/Todo items**: start with a verb, ≤ 10 words, one line each; `**bold**` one key number if
   it matters. Detail belongs on a results slide.
 - **Titles**: short, no period: `Occlusion results`, `Demo: HaMeR vs. WiLoR`, `Acquisition pipeline`.
+- **Paper slides**: the figure is the authors' original, credited in the footnote. Problem and
+  Approach are the only bullets beside it; Novelty and Limitations get their own slide, at most two
+  points each. A very wide figure (≥ 2.6:1) takes the full width under the bullets.
+- **Comparison slides** are the exception to "show it": tables only, no figures or charts. At most
+  5 papers (`max_compare_papers`) and 5 columns (`max_compare_columns`) per theme — paper name in
+  the first column, then only the dimensions that separate the papers. Results cells hold just the
+  number; put ↓ or ↑ in the column header and the best value is bolded for you. The `note` under
+  the results table names the benchmark and whether the numbers are as reported.
 - A project with no visuals appears only on the Done and Todo slides — no text-only slide for it.
 - Roughly 1.5–2 minutes per slide; a typical deck is 8–14 light slides.
 
@@ -134,6 +167,28 @@ can tweak and rebuild it later. Read `references/spec-format.md` for every field
 ]}
 ```
 
+Papers and their comparison use two dedicated slide types; the builder expands each into the
+slides described in step 2 (all fields in `references/spec-format.md`):
+
+```json
+{"type": "paper", "title": "Paper A", "venue": "CVPR 2025",
+ "full_title": "Paper A: Occlusion-Aware Hand Pose Estimation",
+ "pipeline": "/abs/path/paper_a_fig2.png",
+ "problem": "Hand pose breaks when fingers are occluded",
+ "approach": "Carries the previous pose forward as a prior",
+ "novelty": ["Temporal prior gated by joint visibility"],
+ "limitations": ["Drifts after long occlusions", "One camera setup only"],
+ "notes": ["Fuller spoken explanation for the first slide", "…for the second"]},
+{"type": "compare", "theme": "Occlusion-robust hand pose",
+ "methods": {"header": ["Paper", "Input", "Key idea"],
+             "rows": [["Paper A", "RGB video", "Temporal prior"], ["Paper B", "RGB + EMG", "Per-joint fusion"]],
+             "takeaway": "Methods differ mainly in the extra signal they bring"},
+ "results": {"header": ["Paper", "MAE ↓", "Occluded MAE ↓"],
+             "rows": [["Paper A", "8.1°", "12.4°"], ["Paper B", "7.1°", "9.6°"]],
+             "takeaway": "Extra sensing helps most when fingers are hidden",
+             "note": "Occluded subset of <benchmark>; numbers as reported"}}
+```
+
 Use absolute media paths unless the files sit next to the spec. Don't copy the user's media
 around; the builder embeds them into the .pptx. A slide whose block is short sits at the top of
 the content area; give it `"valign": "middle"` when that leaves a large empty band below.
@@ -156,6 +211,10 @@ template. It prints the slide list, then warnings. **Act on every warning**:
 | non-English text | Translate it. |
 | N bullets / bullet over N words / item over N words | Cut to the key sentence, move detail to the speaker `notes`, or split the slide. |
 | no figure, demo video or chart | Ask the user for a visual or make a chart from the numbers; `"text_only": true` only for a genuine discussion slide. |
+| paper: missing the pipeline figure / problem / approach / novelty / limitations | Ask the user for it — don't write it yourself. |
+| paper: N novelty or limitations / point over N words | Keep the two points that matter most, or shorten. |
+| comparison: N papers / N columns | Split the theme, or drop columns that don't separate the papers. |
+| comparison: no results table / no `note` | Ask for numbers on a shared benchmark, and for which benchmark and setting they come from. |
 | no presenter name | Ask for it; set it in `config.json`. |
 | no poster frame | Give the video a `"poster"` image. |
 
