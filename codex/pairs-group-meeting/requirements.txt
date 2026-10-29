@@ -1,0 +1,5 @@
+python-pptx>=1.0
+lxml
+defusedxml
+Pillow
+PyMuPDF

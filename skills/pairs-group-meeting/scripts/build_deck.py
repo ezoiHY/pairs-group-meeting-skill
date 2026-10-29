@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Build a PAIRS Lab group-meeting deck from a JSON spec.
 
-The deck's structure is made with the pptx skill's own scripts: add_slide.py
-clones the template's sample slides in spec order and clean.py drops the unused
-originals. python-pptx then fills each clone, so every slide keeps the
-template's background, logos and title styling. The finished deck is checked
-with the pptx skill's validate.py against the template.
+deck_structure.py makes the deck's structure: the template's sample slides,
+cloned in spec order, without the unused originals. python-pptx then fills each
+clone, so every slide keeps the template's background, logos and title styling.
+deck_structure.py also checks the finished deck. The Claude and Codex versions
+of the skill share this file and differ only in deck_structure.py.
 
 Usage:
-    python build_deck.py spec.json [-o out.pptx] [--pptx-skill DIR] [--no-validate]
+    python build_deck.py spec.json [-o out.pptx] [--no-validate] [--pptx-skill DIR (Claude version)]
 
 The spec format is documented in references/spec-format.md.
 """
@@ -21,9 +21,11 @@ import re
 import subprocess
 import sys
 import tempfile
-import zipfile
 from copy import deepcopy
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import deck_structure  # noqa: E402
 from xml.sax.saxutils import escape
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
@@ -1123,64 +1125,13 @@ def expand_slides(spec, cfg):
     return planned
 
 
-def find_pptx_skill(given):
-    candidates = []
-    if given:
-        candidates.append(Path(given).expanduser())
-    if os.environ.get("PPTX_SKILL_DIR"):
-        candidates.append(Path(os.environ["PPTX_SKILL_DIR"]).expanduser())
-    claude = Path.home() / ".claude"
-    for pattern in ("skills/pptx", "skills/*/pptx", "skills/*/*/pptx", "plugins/**/skills/pptx"):
-        candidates.extend(sorted(claude.glob(pattern)))
-    for c in candidates:
-        if (c / "scripts" / "add_slide.py").exists():
-            return c.resolve()
-    raise SystemExit("pptx skill not found. Load it with the Skill tool and pass its base directory "
-                     "as --pptx-skill (or set PPTX_SKILL_DIR).")
-
-
-def run(cmd):
-    res = subprocess.run(cmd, capture_output=True, text=True)
-    if res.returncode != 0:
-        raise SystemExit(f"{' '.join(map(str, cmd))} failed:\n{res.stdout}{res.stderr}")
-    return res.stdout
-
-
-def build_structure(kinds, scripts, out_path):
-    """Clone template sample slides in spec order with the pptx skill's scripts."""
-    sys.path.insert(0, str(scripts))
-    from office.helpers import rezip, safe_extract
-
-    with tempfile.TemporaryDirectory(prefix="gm_struct_") as tmp:
-        unpacked = Path(tmp) / "deck"
-        with zipfile.ZipFile(TEMPLATE) as zf:
-            safe_extract(zf, unpacked)
-        for kind in kinds:
-            run([sys.executable, str(scripts / "add_slide.py"), str(unpacked), BASE_SLIDE[kind]])
-
-        rels = (unpacked / "ppt" / "_rels" / "presentation.xml.rels").read_text(encoding="utf-8")
-        originals = set()
-        for rel in re.findall(r"<Relationship\b[^>]*>", rels):
-            target = re.search(r'Target="([^"]+)"', rel).group(1)
-            if target.rsplit("/", 1)[-1] in TEMPLATE_SLIDES and "/slides/" in "/" + target:
-                originals.add(re.search(r'Id="([^"]+)"', rel).group(1))
-        pres_path = unpacked / "ppt" / "presentation.xml"
-        pres = pres_path.read_text(encoding="utf-8")
-        pres = re.sub(r'<p:sldId\b[^>]*r:id="([^"]+)"[^>]*/>',
-                      lambda m: "" if m.group(1) in originals else m.group(0), pres)
-        pres_path.write_text(pres, encoding="utf-8")
-
-        run([sys.executable, str(scripts / "clean.py"), str(unpacked)])
-        rezip(unpacked, out_path)
-
-
 def main():
     global METRICS
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("spec", help="deck spec (JSON)")
     ap.add_argument("-o", "--output", help="output .pptx (default: spec 'output', else <output_root>/<YYMMDD>GroupMeeting/)")
-    ap.add_argument("--pptx-skill", help="base directory of the pptx skill (auto-detected under ~/.claude)")
-    ap.add_argument("--no-validate", action="store_true", help="skip the pptx skill's validate.py")
+    ap.add_argument("--no-validate", action="store_true", help="skip the final check of the written deck")
+    deck_structure.add_arguments(ap)
     args = ap.parse_args()
 
     METRICS = Metrics()
@@ -1205,9 +1156,7 @@ def main():
         out = root / f"{code}GroupMeeting" / f"{code}GroupMeeting.pptx"
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    pptx_skill = find_pptx_skill(args.pptx_skill)
-    scripts = pptx_skill / "scripts"
-    build_structure([s["type"] for s in planned], scripts, out)
+    deck_structure.build(args, TEMPLATE, [BASE_SLIDE[s["type"]] for s in planned], TEMPLATE_SLIDES, out)
 
     prs = Presentation(str(out))
     with tempfile.TemporaryDirectory(prefix="gm_media_") as tmp:
@@ -1230,10 +1179,9 @@ def main():
         print(f"WARNING: {w}")
 
     if not args.no_validate:
-        res = subprocess.run([sys.executable, str(scripts / "office" / "validate.py"), str(out),
-                              "--original", str(TEMPLATE)], capture_output=True, text=True)
-        print((res.stdout + res.stderr).strip())
-        if res.returncode != 0:
+        ok, report = deck_structure.validate(args, out, TEMPLATE)
+        print(report)
+        if not ok:
             sys.exit(1)
 
 

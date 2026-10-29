@@ -14,7 +14,8 @@ Read this before editing slide XML by hand, i.e. for anything `build_deck.py` ca
 
 The backgrounds are slide-level `<p:bg>` pictures, and the logos are a group on each slide —
 neither lives on the layouts. So **always start a new slide by cloning one of these slides**
-(`add_slide.py unpacked/ slide3.xml`), never from a layout, or the slide loses its background and logos.
+(`build_deck.py` does this for every spec slide), never from a layout, or the slide loses its
+background and logos.
 
 ## Safe areas (EMU)
 
