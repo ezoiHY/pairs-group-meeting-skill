@@ -7,7 +7,30 @@ A Claude Code skill that turns your progress notes, figures, demo videos and num
 一个 Claude Code skill：把你两周的进展、结果图、demo 视频和实验数字，直接做成基于实验室模板的组会 PPT。
 真正生成 .pptx 和质量检查交给 Anthropic 官方的 pptx skill。
 
-![Example deck](docs/preview.jpg)
+## Screenshots / 效果图
+
+Rendered by PowerPoint from [`examples/demo/spec.json`](examples/demo/spec.json) (synthetic data).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/01-cover.jpg" alt="Cover slide"><br>
+      <sub><b>Cover</b> — date and presenter on the template cover</sub></td>
+    <td width="50%"><img src="docs/images/02-done.jpg" alt="Done last two weeks slide"><br>
+      <sub><b>Done last two weeks</b> — grouped by project, done / on-going in color</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/03-figure.jpg" alt="Figure with key sentences"><br>
+      <sub><b>Figure + key sentences</b> — a takeaway line, ≤ 3 bullets, the figure sized to fit</sub></td>
+    <td width="50%"><img src="docs/images/04-chart.jpg" alt="Native chart slide"><br>
+      <sub><b>Native chart</b> — values labeled, still editable in PowerPoint</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/05-two-charts.jpg" alt="Two charts side by side"><br>
+      <sub><b>Two visuals</b> — laid out automatically, the best result in gold</sub></td>
+    <td width="50%"><img src="docs/images/06-todo.jpg" alt="Todo slide"><br>
+      <sub><b>Todo</b> — next steps per project</sub></td>
+  </tr>
+</table>
 
 ## What it makes
 
