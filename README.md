@@ -9,6 +9,29 @@ A Claude Code skill that turns your progress notes, figures, demo videos and num
 
 ## Screenshots / 效果图
 
+### With real research results / 真实实验结果
+
+Slides built by the skill from real Vision-EMG hand-pose work: measured results, the fusion
+framework diagram, and two demo videos. The videos are embedded and play in PowerPoint; here
+you see their poster frames.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/real-1-results.jpg" alt="Results chart: more training data"><br>
+      <sub><b>Results as native charts</b> — before/after numbers, exact values labeled</sub></td>
+    <td width="50%"><img src="docs/images/real-2-framework.jpg" alt="Vision-EMG fusion framework"><br>
+      <sub><b>Method figure + key sentences</b> — the diagram explained in three short lines</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/real-3-hamer-wilor.jpg" alt="Demo video: HaMeR vs. WiLoR"><br>
+      <sub><b>Demo video</b> — HaMeR vs. WiLoR on the same recording</sub></td>
+    <td width="50%"><img src="docs/images/real-4-wilor-mano.jpg" alt="Demo video: WiLoR to MANO"><br>
+      <sub><b>Demo video</b> — multi-view MANO fit beside the synced camera view</sub></td>
+  </tr>
+</table>
+
+### Full demo deck / 完整示例
+
 Rendered by PowerPoint from [`examples/demo/spec.json`](examples/demo/spec.json) (synthetic data).
 
 <table>
