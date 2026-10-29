@@ -1,0 +1,106 @@
+{
+  "output": "../../build/real/real.pptx",
+  "cover": false,
+  "slides": [
+    {
+      "type": "content",
+      "title": "Results: more training data",
+      "subtitle": "Both models improve; TDS+LSTM jitter drops 39%",
+      "media": [
+        {
+          "chart": {
+            "type": "bar",
+            "categories": [
+              "TDS + LSTM",
+              "TCN"
+            ],
+            "series": [
+              {
+                "name": "Before",
+                "values": [
+                  14.28,
+                  13.78
+                ],
+                "color": "8A97B0"
+              },
+              {
+                "name": "More data",
+                "values": [
+                  13.38,
+                  13.56
+                ],
+                "color": "111F4A"
+              }
+            ],
+            "number_format": "0.00\"°\""
+          },
+          "caption": "Joint angle error, lower is better"
+        },
+        {
+          "chart": {
+            "type": "bar",
+            "categories": [
+              "TDS + LSTM",
+              "TCN"
+            ],
+            "series": [
+              {
+                "name": "Before",
+                "values": [
+                  37.49,
+                  49.92
+                ],
+                "color": "8A97B0"
+              },
+              {
+                "name": "More data",
+                "values": [
+                  23.02,
+                  46.91
+                ],
+                "color": "111F4A"
+              }
+            ],
+            "number_format": "0.00"
+          },
+          "caption": "Static jitter (°/s), lower is better"
+        }
+      ]
+    },
+    {
+      "type": "content",
+      "title": "Vision-EMG fusion framework",
+      "subtitle": "Each joint takes the more reliable of EMG/IMU and vision",
+      "bullets": [
+        "Motion prior combines the previous pose with EMG/IMU",
+        "Grasp memory and per-user memory guide the update",
+        "Outputs both-hand pose with per-joint uncertainty"
+      ],
+      "media": [
+        "/Users/harry/Documents/PairsLab/mermaid-diagram.png"
+      ]
+    },
+    {
+      "type": "content",
+      "title": "Demo: HaMeR vs. WiLoR",
+      "subtitle": "Same recording, both models, frame by frame",
+      "media": [
+        {
+          "path": "/Users/harry/Documents/PairsLab/hamer_wilor_comparison.mp4",
+          "caption": "Input with HaMeR skeleton, HaMeR mesh, WiLoR mesh"
+        }
+      ]
+    },
+    {
+      "type": "content",
+      "title": "Demo: WiLoR to MANO",
+      "subtitle": "Multi-view MANO fit from WiLoR 2D keypoints",
+      "media": [
+        {
+          "path": "/Users/harry/Documents/PairsLab/mano_fixed_palm_camera0356.mp4",
+          "caption": "MANO fit beside the synced D405 view"
+        }
+      ]
+    }
+  ]
+}

@@ -13,7 +13,8 @@ A Claude Code skill that turns your progress notes, figures, demo videos and num
 
 Slides built by the skill from real Vision-EMG hand-pose work: measured results, the fusion
 framework diagram, and two demo videos. The videos are embedded and play in PowerPoint; here
-you see their poster frames.
+you see their poster frames. Spec: [`examples/real/spec.json`](examples/real/spec.json)
+(the media files it points to are not in this repo).
 
 <table>
   <tr>
