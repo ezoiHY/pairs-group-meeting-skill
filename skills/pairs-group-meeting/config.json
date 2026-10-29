@@ -1,0 +1,12 @@
+{
+  "presenter": "",
+  "output_root": "~/Documents/PairsLab",
+  "done_title": "Done last two weeks",
+  "todo_title": "Todo",
+  "style": {
+    "language": "en",
+    "min_font_size": 22,
+    "max_bullets_per_slide": 3,
+    "max_words_per_bullet": 14
+  }
+}

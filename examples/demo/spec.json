@@ -1,0 +1,39 @@
+{
+  "output": "../../build/demo/261029GroupMeeting.pptx",
+  "slides": [
+    {"type": "cover", "date": "2026.10.29", "name": "Your Name"},
+    {"type": "done", "title": "Done last two weeks (10.15–10.29)", "projects": [
+      {"name": "Vision-EMG Hand Pose", "items": [
+        {"text": "Collected data from 3 of 5 subjects", "status": "done"},
+        {"text": "Fusion cuts occluded MAE to **9.6°**", "status": "done"},
+        {"text": "Paper draft: method section", "status": "on-going"}]},
+      {"name": "Data Glove", "items": [
+        {"text": "Calibrated tactile sensor samples", "status": "done"},
+        {"text": "Glove mount design", "status": "on-going"}]}]},
+    {"type": "content", "title": "Fusion pipeline",
+     "subtitle": "EMG fills in the joints that vision cannot see",
+     "bullets": ["Each joint picks its most reliable source", "Muscle activity keeps tracking during occlusion"],
+     "media": ["figures/pipeline.png"]},
+    {"type": "content", "title": "Occlusion results",
+     "subtitle": "Fusion cuts occluded error by 36%",
+     "bullets": ["Biggest gain where vision fails", "Non-occluded accuracy also improves"],
+     "media": [{"chart": {"type": "bar", "categories": ["Occluded", "Non-occluded"],
+                          "series": [{"name": "Vision only", "values": [14.9, 8.1]},
+                                     {"name": "Vision + EMG", "values": [9.6, 7.1]}],
+                          "number_format": "0.0\"°\""},
+                "caption": "Joint angle MAE, lower is better"}]},
+    {"type": "content", "title": "More data helps",
+     "subtitle": "Error keeps falling with each new subject",
+     "media": [{"chart": {"type": "line", "categories": ["1", "2", "3"],
+                          "series": [{"name": "MAE", "values": [11.2, 10.1, 9.6]}], "labels": true,
+                          "number_format": "0.0\"°\""},
+                "caption": "Occluded MAE vs. training subjects"},
+               {"chart": {"type": "bar", "categories": ["TCN", "TDS+LSTM", "Fusion"],
+                          "series": [{"name": "MAE", "values": [13.6, 13.4, 9.6]}],
+                          "highlight": ["Fusion"], "number_format": "0.0\"°\""},
+                "caption": "Occluded MAE by model"}]},
+    {"type": "todo", "projects": [
+      {"name": "Vision-EMG Hand Pose", "items": ["Collect the last 2 subjects", "Finish the paper draft"]},
+      {"name": "Data Glove", "items": ["Print the mount and test fit"]}]}
+  ]
+}

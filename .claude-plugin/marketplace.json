@@ -1,0 +1,14 @@
+{
+  "name": "pairs-lab",
+  "owner": {
+    "name": "Harry",
+    "url": "https://github.com/ezoiHY"
+  },
+  "plugins": [
+    {
+      "name": "pairs-group-meeting",
+      "source": "./",
+      "description": "PAIRS Lab group-meeting (组会) slides on the lab template, generated through the pptx skill."
+    }
+  ]
+}

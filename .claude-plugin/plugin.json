@@ -1,0 +1,12 @@
+{
+  "name": "pairs-group-meeting",
+  "version": "0.1.0",
+  "description": "PAIRS Lab (HKUST-GZ) group-meeting slides: builds a .pptx on the lab template — cover, Done/Todo lists, results slides with figures, demo videos and native charts — and drives the pptx skill for generation and QA.",
+  "author": {
+    "name": "Harry",
+    "url": "https://github.com/ezoiHY"
+  },
+  "homepage": "https://github.com/ezoiHY/pairs-group-meeting-skill",
+  "repository": "https://github.com/ezoiHY/pairs-group-meeting-skill",
+  "keywords": ["pptx", "slides", "group-meeting", "powerpoint", "research", "pairs-lab"]
+}
