@@ -72,6 +72,26 @@ Rendered by PowerPoint from [`examples/demo/spec.json`](examples/demo/spec.json)
   </tr>
 </table>
 
+### Paper reading and comparison / 论文汇报与对比
+
+Rendered by PowerPoint from [`examples/papers/spec.json`](examples/papers/spec.json) (synthetic papers
+and numbers).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/paper-1-pipeline.jpg" alt="Paper reading: pipeline figure with problem and approach"><br>
+      <sub><b>Paper reading</b> — the paper's own pipeline figure, its problem and approach</sub></td>
+    <td width="50%"><img src="docs/images/paper-2-limits.jpg" alt="Paper novelty and limitations"><br>
+      <sub><b>Novelty and limits</b> — side by side, from the presenter</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/paper-3-methods.jpg" alt="Comparison of methods"><br>
+      <sub><b>Compare methods</b> — one theme's papers, the dimensions that separate them</sub></td>
+    <td width="50%"><img src="docs/images/paper-4-results.jpg" alt="Comparison of results"><br>
+      <sub><b>Then results</b> — one benchmark, the best value bolded, the source in the footnote</sub></td>
+  </tr>
+</table>
+
 ## What it makes
 
 | Slide | What goes on it |
@@ -119,8 +139,8 @@ ln -s "$PWD/pairs-group-meeting-skill/codex/pairs-group-meeting" ~/.agents/skill
 ```
 
 `~/.agents/skills/` is Codex's user skills folder. Codex also reads `~/.codex/skills/` (where
-`$skill-installer` puts skills), so linking there works too. Set your name in
-`codex/pairs-group-meeting/config.json`, or let Codex ask the first time.
+`$skill-installer` puts skills), so linking there works too. Codex asks your name the first time
+and saves it in `~/.config/pairs-group-meeting/config.json` (see below).
 
 ### Claude Code
 
@@ -138,8 +158,11 @@ git clone https://github.com/ezoiHY/pairs-group-meeting-skill.git
 ln -s "$PWD/pairs-group-meeting-skill/skills/pairs-group-meeting" ~/.claude/skills/pairs-group-meeting
 ```
 
-Then set your name and output folder in `skills/pairs-group-meeting/config.json`, or let Claude ask
-the first time:
+### Your settings (both versions)
+
+Claude or Codex asks your name the first time and saves it in your own config file,
+`~/.config/pairs-group-meeting/config.json`, outside the skill — so updating the skill never
+overwrites it, and both versions share it. You can also write it yourself:
 
 ```json
 {
@@ -147,6 +170,9 @@ the first time:
   "output_root": "~/Documents/PairsLab"
 }
 ```
+
+Any key here overrides the skill's `config.json`, which holds the lab defaults (list titles and the
+house-style limits).
 
 Decks are written to `<output_root>/<YYMMDD>GroupMeeting/<YYMMDD>GroupMeeting.pptx`, next to the
 `deck_spec.json` they were built from, so you can tweak the spec and rebuild.
@@ -300,7 +326,7 @@ examples/papers/             paper-reading and paper-comparison slides, syntheti
 
 **Changing the skill:** edit the original in `skills/pairs-group-meeting/`, then run
 `python tools/sync_codex.py` to update the Codex version. `--check` exits non-zero if the Codex
-version is out of date. Only `deck_structure.py`, `slide_text.py` and `config.json` are edited by
-hand in `codex/`.
+version is out of date. Only `deck_structure.py` and `slide_text.py` are edited by hand in
+`codex/`.
 
 The template, its backgrounds and the HKUST(GZ) and PAIRS Lab logos belong to their owners.

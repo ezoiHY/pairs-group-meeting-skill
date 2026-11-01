@@ -14,6 +14,7 @@ Prints the absolute path of every slide image and of the contact sheet.
 """
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -24,12 +25,14 @@ from PIL import Image, ImageDraw, ImageFont
 
 POWERPOINT_APP = Path("/Applications/Microsoft PowerPoint.app")
 # A large deck (embedded video) is not ready the moment `open` returns, so wait for it and
-# retry the export. A deck the user already has open is exported but never closed.
+# retry the export. via_powerpoint hands this a uniquely named copy, so the deck found by name is
+# always the one just copied, never a same-named deck the user has open.
 EXPORT_SCRIPT = """
 on run argv
 	set inPath to item 1 of argv
 	set outPath to item 2 of argv
 	set deckName to item 3 of argv
+	with timeout of 600 seconds
 	tell application "Microsoft PowerPoint"
 		set wasOpen to false
 		repeat with i from 1 to (count of presentations)
@@ -60,20 +63,34 @@ on run argv
 		if not wasOpen then close pres saving no
 		if not didSave then error "save as PDF failed: " & lastErr
 	end tell
+	end timeout
 end run
 """
 
 
 def via_powerpoint(deck, pdf):
+    # PowerPoint tells open decks apart by file name only: if the user has an older build of this deck
+    # (or a same-named one from another folder) open, exporting by name would render that instead.
+    # The copy sits next to the deck: a folder PowerPoint may open from is not a given under its sandbox.
+    copy = deck.parent / f"{deck.stem}-render-{os.getpid()}{deck.suffix}"
+    shutil.copy2(deck, copy)
     with tempfile.NamedTemporaryFile("w", suffix=".applescript", delete=False) as f:
         f.write(EXPORT_SCRIPT)
     try:
-        res = subprocess.run(["osascript", f.name, str(deck), str(pdf), deck.name],
-                             capture_output=True, text=True, timeout=300)
+        res = subprocess.run(["osascript", f.name, str(copy), str(pdf), copy.name],
+                             capture_output=True, text=True, timeout=660)
     finally:
         Path(f.name).unlink(missing_ok=True)
+        copy.unlink(missing_ok=True)
     if res.returncode != 0 or not pdf.exists():
-        raise RuntimeError(f"PowerPoint export failed: {res.stderr.strip()}")
+        err = res.stderr.strip()
+        # -9074 (refused) and -1712 (no answer) come from a PowerPoint waiting on a dialog of its own —
+        # often macOS asking to grant it access to the folder — or stuck.
+        if "-9074" in err or "-1712" in err or "deck did not open" in err:
+            raise RuntimeError("PowerPoint would not open the deck. It is probably showing a dialog (granting "
+                               "access to the folder, sign-in, document recovery) or is stuck: check its "
+                               "window and close the dialog, or quit and reopen PowerPoint, then render again.")
+        raise RuntimeError(f"PowerPoint export failed: {err}")
 
 
 def via_libreoffice(deck, pdf, pptx_skill):

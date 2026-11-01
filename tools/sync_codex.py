@@ -5,8 +5,8 @@ The Claude version (skills/pairs-group-meeting) is the source. SHARED files are
 copied unchanged. The Codex SKILL.md is generated from the Claude one: the parts
 about the pptx skill and Claude's tools are swapped for the Codex text below, and
 everything else (content to gather, deck plan, house style, spec, warnings) is
-kept word for word. Files only one version has (deck_structure.py, slide_text.py,
-config.json) are written by hand in each version.
+kept word for word. The files only one version has (deck_structure.py,
+slide_text.py) are written by hand in each version.
 
 Usage:
     python tools/sync_codex.py           update the Codex version
@@ -28,6 +28,7 @@ SHARED = [
     "references/spec-format.md",
     "references/template-anatomy.md",
     "assets/template.pptx",
+    "config.json",
     "requirements.txt",
 ]
 
@@ -46,7 +47,8 @@ scripts/slide_text.py          prints a deck's text, slide by slide
 scripts/render.py              .pptx → slide PNGs + overview, via PowerPoint (or LibreOffice)
 references/spec-format.md      the spec: slide types, every field, examples
 references/template-anatomy.md geometry, colors, fonts, XML — for hand edits only
-config.json                    presenter name, output folder, list titles, house style limits
+config.json                    lab defaults: output folder, list titles, house style limits
+~/.config/pairs-group-meeting/config.json   the user's own settings (presenter…), outside the skill
 requirements.txt               Python packages the scripts need
 ```
 
@@ -61,8 +63,12 @@ STEP0 = """## Step 0 — Set up
    the network, ask the user to approve the install.
 2. **Shell variables don't survive between commands**, so start every command by setting
    `SKILL_PY="<python>"; …`.
-3. **Config**: read `config.json`. If `presenter` is empty, take the name from the user's message
-   or ask for it, save it there, and tell the user you saved it — later decks then won't ask.
+3. **Config**: the skill's `config.json` holds the lab defaults; the user's own
+   `~/.config/pairs-group-meeting/config.json` overrides any of its keys (`style` key by key). Read
+   both. If no `presenter` is set, take the name from the user's message or ask for it, save it in
+   the user's file — create it as `{"presenter": "<name>"}` if it doesn't exist — and tell the user
+   you saved it; later decks then won't ask. Never write it into the skill's `config.json`: that file
+   is shared, and an update replaces it.
 
 """
 

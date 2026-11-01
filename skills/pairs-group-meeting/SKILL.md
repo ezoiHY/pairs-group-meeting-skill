@@ -16,7 +16,8 @@ scripts/build_deck.py          spec.json → .pptx (uses the pptx skill's script
 scripts/render.py              .pptx → slide PNGs + overview, via PowerPoint (or LibreOffice)
 references/spec-format.md      the spec: slide types, every field, examples
 references/template-anatomy.md geometry, colors, fonts, XML — for hand edits only
-config.json                    presenter name, output folder, list titles, house style limits
+config.json                    lab defaults: output folder, list titles, house style limits
+~/.config/pairs-group-meeting/config.json   the user's own settings (presenter…), outside the skill
 requirements.txt               Python packages the scripts need
 ```
 
@@ -36,8 +37,12 @@ requirements.txt               Python packages the scripts need
    ```
    and always write `"$PPTX_SKILL"` in double quotes — its path can contain spaces
    (`…/Application Support/…`).
-4. **Config**: read `config.json`. If `presenter` is empty, take the name from the user's message
-   or ask for it, save it there, and tell the user you saved it — later decks then won't ask.
+4. **Config**: the skill's `config.json` holds the lab defaults; the user's own
+   `~/.config/pairs-group-meeting/config.json` overrides any of its keys (`style` key by key). Read
+   both. If no `presenter` is set, take the name from the user's message or ask for it, save it in
+   the user's file — create it as `{"presenter": "<name>"}` if it doesn't exist — and tell the user
+   you saved it; later decks then won't ask. Never write it into the skill's `config.json`: that file
+   is shared, and an update replaces it.
 
 ## Step 1 — Gather the content
 
@@ -56,7 +61,7 @@ What a group-meeting deck needs, and what to ask for if the user hasn't said:
   your own knowledge, least of all the limitations:
   1. Short name, full title, venue and year.
   2. The paper's **original pipeline figure**: the authors' own overview/method figure, as an image
-     or as a PDF plus page number. Don't redraw it or swap in a diagram you made.
+     or as a PDF plus page number (`pipeline_page`). Don't redraw it or swap in a diagram you made.
   3. **Problem** — what the paper sets out to solve.
   4. **Approach** — how it solves it.
   5. **Novelty** — what is new compared with earlier work.
@@ -73,7 +78,7 @@ What a group-meeting deck needs, and what to ask for if the user hasn't said:
   like with like: if two papers report on different benchmarks or settings, say so or leave the
   cell as `—`. Never invent a number.
 
-**Look at the previous deck.** Find the newest earlier deck in `output_root` (from `config.json`):
+**Look at the previous deck.** Find the newest earlier deck in `output_root` (from the config):
 usually a `YYMMDDGroupMeeting/` folder, but older decks may be named differently (`260930组会.pptx`).
 Read it with `$SKILL_PY "$PPTX_SKILL/scripts/slide_text.py" <previous deck>` and find its Todo
 slide — older decks may title it differently ("To-Do List for the Next 7 Days"). Last meeting's
@@ -128,7 +133,7 @@ the rest.
     the title. Skip them when the title already says it.
 - **Light slides.** One message per slide. If a slide needs more than 3 bullets, or more than two
   visuals plus text, split it into two slides.
-- **Done/Todo items**: start with a verb, ≤ 10 words, one line each; `**bold**` one key number if
+- **Done/Todo items**: start with a verb, ≤ 10 words (`max_words_per_item`), one line each; `**bold**` one key number if
   it matters. Detail belongs on a results slide.
 - **Titles**: short, no period: `Occlusion results`, `Demo: HaMeR vs. WiLoR`, `Acquisition pipeline`.
 - **Paper slides**: the figure is the authors' original, credited in the footnote. Problem and
@@ -205,6 +210,7 @@ template. It prints the slide list, then warnings. **Act on every warning**:
 
 | Warning | What to do |
 |---|---|
+| unknown key 'x' is ignored — did you mean 'y'? / layout or valign not one of … | Fix the spelling in the spec and rebuild. |
 | list split into N slides | Usually items are too long: shorten them, or move detail to a results slide, and rebuild. Keep the split only if the content really is that long. |
 | text overflows its area | Cut words or split the slide — the font never goes below 22pt. |
 | table taller than the space | Turn it into a chart, or split the rows across two slides. |
@@ -215,7 +221,7 @@ template. It prints the slide list, then warnings. **Act on every warning**:
 | paper: N novelty or limitations / point over N words | Keep the two points that matter most, or shorten. |
 | comparison: N papers / N columns | Split the theme, or drop columns that don't separate the papers. |
 | comparison: no results table / no `note` | Ask for numbers on a shared benchmark, and for which benchmark and setting they come from. |
-| no presenter name | Ask for it; set it in `config.json`. |
+| no presenter name | Ask for it; save it in `~/.config/pairs-group-meeting/config.json`. |
 | no poster frame | Give the video a `"poster"` image. |
 
 ## Step 5 — QA (the pptx skill's rules)

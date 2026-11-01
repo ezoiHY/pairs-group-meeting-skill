@@ -1,0 +1,28 @@
+name: check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r codex/pairs-group-meeting/requirements.txt
+
+      - name: Codex version is in sync with the original
+        run: python tools/sync_codex.py --check
+
+      # The Codex version needs no pptx skill, so it can build here. Calibri is missing on Linux, so
+      # text fitting is estimated; only crashes, a failed file check and spec typos fail the job.
+      - name: Build the examples with the Codex version
+        run: |
+          set -o pipefail
+          for spec in examples/demo/spec.json examples/papers/spec.json; do
+            python codex/pairs-group-meeting/scripts/build_deck.py "$spec" -o "$RUNNER_TEMP/$(basename "$(dirname "$spec")").pptx" | tee -a build.log
+          done
+          ! grep "unknown key" build.log

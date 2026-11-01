@@ -15,6 +15,7 @@ The spec format is documented in references/spec-format.md.
 
 import argparse
 import datetime
+import difflib
 import json
 import os
 import re
@@ -37,6 +38,8 @@ from pptx.util import Emu
 SKILL_DIR = Path(__file__).resolve().parent.parent
 TEMPLATE = SKILL_DIR / "assets" / "template.pptx"
 CONFIG = SKILL_DIR / "config.json"
+# The user's own settings (presenter, output folder) live outside the skill, so updates never touch them.
+USER_CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "pairs-group-meeting" / "config.json"
 
 # Template sample slide each spec type is cloned from.
 BASE_SLIDE = {"cover": "slide1.xml", "done": "slide2.xml", "content": "slide3.xml", "todo": "slide4.xml"}
@@ -87,11 +90,17 @@ WARNINGS = []
 
 # House style; config.json "style" overrides these.
 STYLE = {"language": "en", "min_font_size": 22, "max_bullets_per_slide": 3, "max_words_per_bullet": 14,
-         "max_compare_papers": 5, "max_compare_columns": 5}
+         "max_words_per_item": 10, "max_compare_papers": 5, "max_compare_columns": 5}
 
 
 def warn(msg):
     WARNINGS.append(msg)
+
+
+def show_warnings():
+    for w in WARNINGS:
+        print(f"WARNING: {w}")
+    WARNINGS.clear()
 
 
 def font_sizes(top):
@@ -371,9 +380,9 @@ def normalize_item(item):
 def status_run(status):
     key = status.strip().lower()
     if key in DONE_WORDS:
-        return Run("done" if key in {"done", "finished", "complete", "completed"} else status, scheme=DONE_SCHEME)
+        return Run("done", scheme=DONE_SCHEME)
     if key in ONGOING_WORDS:
-        return Run("on-going" if key in {"on-going", "ongoing", "wip", "in-progress"} else status, color=ONGOING)
+        return Run(status if key == "in progress" else "on-going", color=ONGOING)
     return Run(status, color=ONGOING)
 
 
@@ -385,7 +394,8 @@ def progress_paras(projects, kind):
         head = [Run(label, bold=True)] if label else []
         head += inline_runs(proj.get("name", ""), bold=True)
         paras.append(Para(head, before=0 if pi == 0 else 18 / 28))
-        for ii, item in enumerate(proj.get("items", [])):
+        # A project continued from the previous slide keeps counting where it left off.
+        for ii, item in enumerate(proj.get("items", []), proj.get("_first", 0)):
             item = normalize_item(item)
             runs = [Run(f"{chr(ord('a') + ii % 26)}. ")] + inline_runs(item["text"])
             if kind == "done" and item.get("status"):
@@ -412,7 +422,7 @@ def plan_progress(s, kind):
             name = proj.get("name", "") + (" (cont.)" if start else "")
             taken = []
             for item in items[start:]:
-                trial = current + [dict(proj, name=name, items=taken + [item])]
+                trial = current + [dict(proj, name=name, items=taken + [item], _first=start)]
                 if stack_height(progress_paras(trial, kind), FULL_W, split_size) > height:
                     break
                 taken.append(item)
@@ -422,7 +432,9 @@ def plan_progress(s, kind):
                 continue
             if not taken and items[start:]:
                 taken = [items[start]]       # a single item taller than a slide: keep it anyway
-            current.append(dict(proj, name=name, items=taken))
+                warn(f"'{s['title']}': an item is too long for a slide even on its own — shorten it: "
+                     f"{taken[0]['text'][:60]!r}")
+            current.append(dict(proj, name=name, items=taken, _first=start))
             start += len(taken)
             if start >= len(items):
                 break
@@ -503,24 +515,39 @@ def prepare_media(item, base_dir, work):
     if ext in RENDER_EXTS:
         import pymupdf
         doc = pymupdf.open(path)
-        page = doc[int(item.get("page", 1)) - 1]
+        number = int(item.get("page", 1))
+        if not 1 <= number <= len(doc):
+            warn(f"{path.name} has no page {number} (it has {len(doc)}) — used page 1")
+            number = 1
         out = work / f"{path.stem}-{len(list(work.iterdir()))}.png"
-        page.get_pixmap(dpi=220, alpha=False).save(out)
+        doc[number - 1].get_pixmap(dpi=220, alpha=False).save(out)
         path = out
     elif ext in CONVERT_EXTS or ext not in IMAGE_EXTS:
         out = work / f"{path.stem}-{len(list(work.iterdir()))}.png"
         with Image.open(path) as im:
-            im.save(out)
+            png_ready(im).save(out)
         path = out
     with Image.open(path) as im:
-        upright = ImageOps.exif_transpose(im)
-        if upright is not im:
+        # Re-save only a photo whose EXIF says it is rotated; anything else goes in as it is, so a JPEG
+        # stays a JPEG and a GIF keeps its animation.
+        if im.getexif().get(EXIF_ORIENTATION, 1) != 1:
+            upright = png_ready(ImageOps.exif_transpose(im))
             out = work / f"{path.stem}-upright-{len(list(work.iterdir()))}.png"
             upright.save(out)
             path = out
-        item["aspect"] = upright.width / upright.height
+            item["aspect"] = upright.width / upright.height
+        else:
+            item["aspect"] = im.width / im.height
     item.update(kind="image", file=path)
     return item
+
+
+EXIF_ORIENTATION = 0x0112
+
+
+def png_ready(im):
+    """The image in a mode PNG can store (CMYK and the like become RGB)."""
+    return im if im.mode in ("1", "L", "LA", "P", "RGB", "RGBA", "I", "I;16") else im.convert("RGB")
 
 
 def video_poster(path, work):
@@ -552,7 +579,7 @@ def caption_height(text, width_emu, size=None):
     return line_count(runs, width_emu, size) * line_height(runs, size) * EMU_PER_PT + 0.06 * EMU_PER_IN
 
 
-def media_layout(items, box, rows=None, valign="top"):
+def media_layout(items, box, rows=None, valign="top", what="media"):
     """Justified rows: each row spans the box width; rows are scaled together to fit its height."""
     x, y, w, h = box
     n = len(items)
@@ -565,10 +592,17 @@ def media_layout(items, box, rows=None, valign="top"):
             row_h = (w - GAP * (c - 1)) / sum(it["aspect"] for it in group)
             rows_spec.append((idx, c, row_h))
             idx += c
-        fixed = GAP * (r - 1)
-        for i0, c, row_h in rows_spec:
-            fixed += max(caption_height(it.get("caption"), it["aspect"] * row_h) for it in items[i0:i0 + c])
-        scale = min(1.0, (h - fixed) / sum(rh for _, _, rh in rows_spec))
+        # A smaller item wraps its caption onto more lines, so measure captions at the scaled width and
+        # shrink again until the two agree. The scale only ever goes down, so this settles in a few steps.
+        scale = 1.0
+        for _ in range(8):
+            fixed = GAP * (r - 1) + sum(max(caption_height(it.get("caption"), it["aspect"] * row_h * scale)
+                                            for it in items[i0:i0 + c]) for i0, c, row_h in rows_spec)
+            new = min(1.0, (h - fixed) / sum(rh for _, _, rh in rows_spec))
+            if new <= 0 or abs(new - scale) < 1e-4:
+                scale = new
+                break
+            scale = new
         if scale <= 0:
             continue
         area = sum(it["aspect"] * (rh * scale) ** 2 for i0, c, rh in rows_spec for it in items[i0:i0 + c])
@@ -591,12 +625,15 @@ def media_layout(items, box, rows=None, valign="top"):
             cx += iw + GAP
         cy += rh + cap + GAP
     used = cy - GAP - y
-    shift = (h - used) / 2 if valign == "middle" else 0
+    if used > h + EMU_PER_PT:
+        warn(f"{what}: figures and captions run {(used - h) / EMU_PER_IN:.2f}\" past the content area — "
+             "shorten the captions or use fewer media")
+    shift = max(0, (h - used) / 2) if valign == "middle" else 0
     return [(it, (bx, by + shift, bw, bh), cap) for it, (bx, by, bw, bh), cap in placed], used
 
 
-def add_media(slide, items, box, rows=None, valign="top"):
-    placed, used = media_layout(items, box, rows, valign)
+def add_media(slide, items, box, rows=None, valign="top", what="media"):
+    placed, used = media_layout(items, box, rows, valign, what)
     for k, (it, (x, y, w, h), cap) in enumerate(placed, 1):
         x, y, w, h = int(x), int(y), int(w), int(h)
         if it["kind"] == "chart":
@@ -720,7 +757,28 @@ CELL_PAD_X = int(0.08 * EMU_PER_IN)
 CELL_PAD_Y = int(0.045 * EMU_PER_IN)
 
 
-def plan_table(t, width, max_h, max_size=24):
+ALIGN = {"left": "l", "center": "ctr", "right": "r"}
+
+
+def table_align(align, ncols, what):
+    """One alignment code (or None for the default) per column."""
+    if align is None:
+        return [None] * ncols
+    if isinstance(align, str):
+        align = [align] * ncols
+    if len(align) != ncols:
+        warn(f"{what}: align has {len(align)} entries for {ncols} columns — the rest use the default")
+    codes = []
+    for j in range(ncols):
+        a = align[j] if j < len(align) else None
+        if a is not None and a not in ALIGN:
+            warn(f"{what}: align {a!r} is not left, center or right — used the default")
+            a = None
+        codes.append(ALIGN.get(a))
+    return codes
+
+
+def plan_table(t, width, max_h, max_size=24, what="table"):
     """Pick the largest font that fits the height without wrapping cells more than the minimum size does."""
     header = [cell_spec(v) for v in t.get("header", [])]
     rows = [[cell_spec(v) for v in r] for r in t["rows"]]
@@ -728,11 +786,20 @@ def plan_table(t, width, max_h, max_size=24):
     ncols = max(len(r) for r in grid)
     for r in grid:
         r.extend(cell_spec("") for _ in range(ncols - len(r)))
+    col_widths = t.get("col_widths")
+    if col_widths and (len(col_widths) != ncols or not all(isinstance(v, (int, float)) and v > 0 for v in col_widths)):
+        warn(f"{what}: col_widths needs {ncols} positive numbers, one per column — sized the columns to fit instead")
+        col_widths = None
+    font_size = t.get("font_size")
+    if font_size and float(font_size) < STYLE["min_font_size"]:
+        warn(f"{what}: font_size {font_size} is below the {STYLE['min_font_size']}pt minimum — used "
+             f"{STYLE['min_font_size']}pt; shorten or split the table instead")
+        font_size = STYLE["min_font_size"]
 
     def layout(size):
         table_w = width
-        if t.get("col_widths"):
-            ratios = [float(v) for v in t["col_widths"]]
+        if col_widths:
+            ratios = [float(v) for v in col_widths]
         else:
             pad = 2 * CELL_PAD_X / EMU_PER_PT + 6
             natural = [max(METRICS.width(r[j]["text"], size, True) for r in grid) + pad for j in range(ncols)]
@@ -754,8 +821,8 @@ def plan_table(t, width, max_h, max_size=24):
         return {"widths": widths, "heights": heights, "size": size, "lines": wrapped}
 
     floor = layout(STYLE["min_font_size"])
-    if t.get("font_size"):
-        plan = layout(float(t["font_size"]))
+    if font_size:
+        plan = layout(float(font_size))
         if plan["lines"] > floor["lines"]:
             warn(f"table at {plan['size']:g}pt wraps cells that fit on one line at smaller sizes — "
                  "drop font_size or shorten the cells")
@@ -764,8 +831,8 @@ def plan_table(t, width, max_h, max_size=24):
         fits = [p for p in plans if sum(p["heights"]) <= max_h]
         plan = next((p for p in fits if p["lines"] <= floor["lines"]), fits[-1] if fits else floor)
     if sum(plan["heights"]) > max_h:
-        warn(f"table with {len(rows)} rows is taller than the space left at {plan['size']:g}pt — split it")
-    plan.update(grid=grid, header=bool(header), align=t.get("align"))
+        warn(f"{what}: table with {len(rows)} rows is taller than the space left at {plan['size']:g}pt — split it")
+    plan.update(grid=grid, header=bool(header), align=table_align(t.get("align"), ncols, what))
     return plan
 
 
@@ -785,10 +852,7 @@ def add_table(slide, plan, x, y):
         body_i = i - 1 if plan["header"] else i
         for j, c in enumerate(r):
             cell = table.cell(i, j)
-            if plan["align"]:
-                algn = {"left": "l", "center": "ctr", "right": "r"}[plan["align"][j]]
-            else:
-                algn = "ctr" if is_head or j > 0 else "l"
+            algn = plan["align"][j] or ("ctr" if is_head or j > 0 else "l")
             color = "FFFFFF" if is_head else (c["color"] or NAVY)
             runs = inline_runs(c["text"], bold=is_head or c["bold"], color=color)
             write_paragraphs(cell.text_frame._txBody, [Para(runs, algn=algn, color=color)], plan["size"])
@@ -832,6 +896,9 @@ def fill_content(slide, s, base_dir, work):
     bullets = bullet_paras(s.get("bullets", []))
     media = [prepare_media(m, base_dir, work) for m in s.get("media", [])]
     table = s.get("table")
+    if table and not table.get("rows"):
+        warn(f"{label}: table has no rows — left out")
+        table = None
     layout = s.get("layout", "auto")
     if layout == "fit":
         # Figure-led slide: a wide figure gets the full width under the text, a squarer one sits beside it.
@@ -840,7 +907,12 @@ def fill_content(slide, s, base_dir, work):
         layout = "text-left" if bullets and media and not table else "stack"
 
     if layout in ("text-left", "text-right") and bullets:
-        tw = int((x1 - x0) * float(s.get("text_width", 0.38)))
+        share = float(s.get("text_width", 0.38))
+        if not 0.15 <= share <= 0.75:
+            warn(f"{label}: text_width {share:g} is the bullet column's share of the width, between 0.15 and "
+                 "0.75 — used 0.38")
+            share = 0.38
+        tw = int((x1 - x0) * share)
         if layout == "text-left":
             text_box, rest = (x0, y0, tw, y1 - y0), (x0 + tw + COL_GAP, y0, x1, y1)
         else:
@@ -859,7 +931,7 @@ def fill_content(slide, s, base_dir, work):
 
     if table:
         room = (y1 - y0) if not media else (y1 - y0) * 0.55
-        plan = plan_table(table, x1 - x0, room, table_max)
+        plan = plan_table(table, x1 - x0, room, table_max, f"{label} table")
         add_table(slide, plan, x0 + (x1 - x0 - sum(plan["widths"])) // 2, y0)
         y0 += sum(plan["heights"]) + GAP
 
@@ -868,7 +940,7 @@ def fill_content(slide, s, base_dir, work):
             raise SystemExit(f"{label}: no room left for media — move text or the table to another slide")
         only_media = not s.get("bullets") and not table
         add_media(slide, media, (x0, y0, x1 - x0, y1 - y0), s.get("media_rows"),
-                  "middle" if only_media else "top")
+                  "middle" if only_media else "top", f"{label} media")
 
     if s.get("valign") == "middle":
         center_vertically([sh for sh in slide.shapes if sh.shape_id != slide.shapes.title.shape_id])
@@ -897,9 +969,15 @@ def center_vertically(shapes):
 
 
 def load_config():
-    if CONFIG.exists():
-        return json.loads(CONFIG.read_text(encoding="utf-8"))
-    return {}
+    """The skill's config.json (lab defaults), overridden key by key by the user's own; `style` merges."""
+    cfg = {}
+    for path in (CONFIG, USER_CONFIG):
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            style = {**cfg.get("style", {}), **data.get("style", {})}
+            cfg.update(data)
+            cfg["style"] = style
+    return cfg
 
 
 def parse_date(date):
@@ -918,10 +996,15 @@ def parse_date(date):
 
 
 def slide_texts(s):
-    texts = [s.get("title"), s.get("subtitle"), s.get("name")] + list(s.get("extra_lines", []))
+    texts = [s.get("title"), s.get("subtitle"), s.get("name"), s.get("footnote")] + list(s.get("extra_lines", []))
     texts += [normalize_item(b)["text"] for b in s.get("bullets", [])]
     for proj in s.get("projects", []):
-        texts += [proj.get("name")] + [normalize_item(i)["text"] for i in proj.get("items", [])]
+        texts.append(proj.get("name"))
+        for item in map(normalize_item, proj.get("items", [])):
+            # Known statuses (完成, 进行中…) are written in English; any other status is shown as given.
+            status = item.get("status", "")
+            known = status.strip().lower() in DONE_WORDS | ONGOING_WORDS
+            texts += [item["text"], None if known else status]
     table = s.get("table") or {}
     for row in [table.get("header", [])] + list(table.get("rows", [])):
         texts += [cell_spec(c)["text"] for c in row]
@@ -933,8 +1016,103 @@ def slide_texts(s):
     return [t for t in texts if t]
 
 
+LABEL_RE = re.compile(r"^\*\*[^*]{1,30}:\*\*\s*")
+
+
 def words(text):
-    return len(text.replace("**", "").split())
+    """Words in a line, not counting a leading **Label:** such as a paper slide's **Problem:**."""
+    return len(LABEL_RE.sub("", text).replace("**", "").split())
+
+
+# Keys each spec object may have. Anything else is most likely a typo, which would otherwise be
+# ignored without a word.
+SPEC_KEYS = {
+    "spec": {"slides", "output", "cover"},
+    "cover": {"type", "title", "date", "name", "extra_lines", "notes"},
+    "done": {"type", "title", "projects", "notes"},
+    "todo": {"type", "title", "projects", "notes"},
+    "content": {"type", "title", "subtitle", "bullets", "table", "media", "media_rows", "layout", "text_width",
+                "footnote", "text_only", "valign", "notes"},
+    "paper": {"type", "title", "name", "full_title", "venue", "pipeline", "pipeline_page", "pipeline_caption", "problem",
+              "approach", "novelty", "limitations", "takeaway", "notes", "layout", "text_width"},
+    "compare": {"type", "theme", "title", "methods", "results", "notes"},
+    "project": {"name", "label", "items"},
+    "item": {"text", "status"},
+    "bullet": {"text", "level", "bullet", "bold", "color"},
+    "table": {"header", "rows", "col_widths", "align", "font_size"},
+    "methods": {"header", "rows", "col_widths", "align", "font_size", "takeaway"},
+    "results": {"header", "rows", "col_widths", "align", "font_size", "takeaway", "note", "better"},
+    "cell": {"text", "bold", "color", "fill"},
+    "media": {"path", "caption", "poster", "page", "chart", "aspect"},
+    "chart": {"type", "categories", "series", "number_format", "labels", "highlight", "y_min", "y_max"},
+    "series": {"name", "values", "color"},
+}
+SPEC_VALUES = {"layout": {"auto", "text-left", "text-right", "stack", "fit"}, "valign": {"top", "middle"}}
+LIST_KEYS = {"bullets", "media", "extra_lines", "projects", "items", "highlight", "categories", "header"}
+HEX_RE = re.compile(r"[0-9A-Fa-f]{6}")
+
+
+def check_keys(obj, kind, where):
+    """Warn about keys and values the builder would ignore or choke on, and tidy the ones it can."""
+    if not isinstance(obj, dict):
+        return
+    for key, value in list(obj.items()):
+        if key not in SPEC_KEYS[kind]:
+            near = difflib.get_close_matches(key, SPEC_KEYS[kind], n=1)
+            hint = f" — did you mean {near[0]!r}?" if near else ""
+            warn(f"{where}: unknown key {key!r} is ignored{hint}")
+        elif value is None:
+            del obj[key]                                     # null means "not given"
+        elif key in LIST_KEYS and isinstance(value, str):
+            warn(f"{where}: {key} should be a list — used {value!r} as its only entry")
+            obj[key] = [value]
+        elif key in SPEC_VALUES and (not isinstance(value, str) or value not in SPEC_VALUES[key]):
+            warn(f"{where}: {key} {value!r} is not one of {sorted(SPEC_VALUES[key])} — used the default")
+            del obj[key]
+        elif key in ("color", "fill"):
+            hexa = str(value).strip().lstrip("#")
+            if HEX_RE.fullmatch(hexa):
+                obj[key] = hexa.upper()
+            else:
+                warn(f"{where}: {key} {value!r} is not a color like \"980000\" — used the default")
+                del obj[key]
+
+
+def check_spec(spec):
+    """Warn about every key the builder would ignore or choke on, before anything is built."""
+    check_keys(spec, "spec", "spec")
+    if isinstance(spec.get("cover"), dict):
+        cover = spec.pop("cover")
+        if any(isinstance(s, dict) and s.get("type") == "cover" for s in spec.get("slides", [])):
+            warn("spec: \"cover\" is only true or false — its fields are ignored, the cover slide is used")
+        else:
+            warn("spec: \"cover\" is only true or false — made its fields into a cover slide")
+            spec["slides"].insert(0, {"type": "cover", **cover})
+    for i, s in enumerate(spec.get("slides", []), 1):
+        kind = s.get("type", "content") if isinstance(s, dict) else None
+        if kind not in ("cover", "done", "todo", "content", "paper", "compare"):
+            continue
+        where = f"slide {i} ({s.get('title') or s.get('theme') or kind})"
+        check_keys(s, kind, where)
+        for proj in s.get("projects", []):
+            check_keys(proj, "project", where)
+            for item in proj.get("items", []) if isinstance(proj, dict) else []:
+                check_keys(item, "item", where)
+        for b in s.get("bullets", []):
+            check_keys(b, "bullet", where)
+        tables = [("table", s.get("table"))] if kind == "content" else []
+        tables += [(k, s.get(k)) for k in ("methods", "results")] if kind == "compare" else []
+        for table_kind, t in tables:
+            check_keys(t, table_kind, f"{where} {table_kind}")
+            for row in ([t.get("header", [])] + list(t.get("rows", []))) if isinstance(t, dict) else []:
+                for cell in row:
+                    check_keys(cell, "cell", f"{where} {table_kind}")
+        for m in s.get("media", []):
+            check_keys(m, "media", where)
+            chart = m.get("chart") if isinstance(m, dict) else None
+            check_keys(chart, "chart", where)
+            for ser in chart.get("series", []) if isinstance(chart, dict) else []:
+                check_keys(ser, "series", where)
 
 
 def lint(s):
@@ -956,10 +1134,11 @@ def lint(s):
         if not s.get("media") and not s.get("text_only"):
             warn(f"{where}: no figure, demo video or chart — add a visual (or set \"text_only\": true)")
     for proj in s.get("projects", []):
+        item_limit = STYLE["max_words_per_item"]
         long = next((normalize_item(i)["text"] for i in proj.get("items", [])
-                     if words(normalize_item(i)["text"]) > limit), None)
+                     if words(normalize_item(i)["text"]) > item_limit), None)
         if long:
-            warn(f"{where}: item over {limit} words — {long!r}")
+            warn(f"{where}: item over {item_limit} words — {long!r}")
 
 
 def as_list(value):
@@ -976,7 +1155,11 @@ def paper_slides(s):
     where = f"paper '{name}'"
     problem, approach = s.get("problem"), s.get("approach")
     novelty, limits = as_list(s.get("novelty")), as_list(s.get("limitations"))
-    needed = (("the original pipeline figure", s.get("pipeline")), ("the problem it solves", problem),
+    pipeline = s.get("pipeline")
+    figure = dict(pipeline) if isinstance(pipeline, dict) else {"path": pipeline} if pipeline else None
+    if figure and s.get("pipeline_page"):
+        figure["page"] = s["pipeline_page"]          # the page of a PDF the figure is on
+    needed = (("the original pipeline figure", figure), ("the problem it solves", problem),
               ("how it solves it", approach), ("the novelty", novelty), ("the limitations", limits))
     missing = [label for label, value in needed if not value]
     if missing:
@@ -985,12 +1168,13 @@ def paper_slides(s):
 
     bullets = [f"**{label}:** {text}" for label, text in (("Problem", problem), ("Approach", approach)) if text]
     first = {"type": "content", "title": f"Paper reading: {name}", "bullets": bullets, "layout": "fit",
-             "text_only": not s.get("pipeline")}
+             "text_only": not figure}
     if s.get("full_title"):
         first["subtitle"] = s["full_title"]
-    if s.get("pipeline"):
-        first["media"] = [{"path": s["pipeline"], "caption": s.get("pipeline_caption", "")}]
-    source = [t for t in (s.get("venue"), "pipeline figure from the paper" if s.get("pipeline") else None) if t]
+    if figure:
+        figure.setdefault("caption", s.get("pipeline_caption", ""))
+        first["media"] = [figure]
+    source = [t for t in (s.get("venue"), "pipeline figure from the paper" if figure else None) if t]
     if source:
         first["footnote"] = " · ".join(source)
     first.update({k: s[k] for k in ("layout", "text_width") if k in s})
@@ -1019,15 +1203,31 @@ def paper_slides(s):
     return out
 
 
-NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
+# A number as results tables write it: −3.2 (Unicode minus), .85, 1,234, and an optional K/M/B/G/T unit.
+# A minus right after a letter or digit is a hyphen (ResNet-50), not a sign.
+NUMBER_RE = re.compile(r"((?<!\w)[-−])?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)\s?([KkMBGT](?![A-Za-z]))?")
+UNITS = {"K": 1e3, "k": 1e3, "M": 1e6, "B": 1e9, "G": 1e9, "T": 1e12}
+
+
+def cell_number(text):
+    """The first number in a cell, or None."""
+    hit = NUMBER_RE.search(text)
+    if not hit:
+        return None
+    sign, digits, unit = hit.groups()
+    value = float(digits.replace(",", "")) * UNITS.get(unit or "", 1)
+    return -value if sign else value
 
 
 def bold_best(table):
     """Rows of a results table with the best value of each column bold (from ↓/↑ in the header, or `better`)."""
     header = [cell_spec(c)["text"] for c in table.get("header", [])]
     rows = [list(r) for r in table["rows"]]
+    ncols = max(len(r) for r in rows)
     better = table.get("better") or []
-    for j in range(max(len(r) for r in rows)):
+    if isinstance(better, str):                      # one rule for every column after the paper names
+        better = [None] + [better] * (ncols - 1)
+    for j in range(ncols):
         rule = better[j] if j < len(better) else None
         if rule is None and j < len(header):
             rule = "lower" if "↓" in header[j] else "higher" if "↑" in header[j] else None
@@ -1035,9 +1235,9 @@ def bold_best(table):
             continue
         found = []
         for i, r in enumerate(rows):
-            hit = NUMBER_RE.search(cell_spec(r[j])["text"]) if j < len(r) else None
-            if hit:
-                found.append((float(hit.group()), i))
+            value = cell_number(cell_spec(r[j])["text"]) if j < len(r) else None
+            if value is not None:
+                found.append((value, i))
         if not found:
             continue
         best = (min if rule == "lower" else max)(v for v, _ in found)
@@ -1089,6 +1289,7 @@ def compare_slides(s):
 
 
 def expand_slides(spec, cfg):
+    check_spec(spec)
     slides = []
     for s in spec["slides"]:
         kind = s.get("type", "content")
@@ -1110,11 +1311,14 @@ def expand_slides(spec, cfg):
                 warn(f"cover date {s['date']!r} is not a date; used as written")
             s.setdefault("name", cfg.get("presenter", ""))
             if not s["name"]:
-                warn("cover has no presenter name — set \"name\" in the spec or \"presenter\" in config.json")
+                warn(f"cover has no presenter name — set \"name\" in the spec or \"presenter\" in {USER_CONFIG}")
             lint(s)
             planned.append(s)
         elif kind in ("done", "todo"):
             s.setdefault("title", cfg.get(f"{kind}_title") or ("Done last two weeks" if kind == "done" else "Todo"))
+            if not s.get("projects"):
+                warn(f"'{s['title']}' has no \"projects\" — the slide is empty")
+                s["projects"] = []
             lint(s)
             planned.extend(plan_progress(s, kind))
         else:
@@ -1175,8 +1379,7 @@ def main():
     print(f"Wrote {out} ({len(planned)} slides)")
     for i, s in enumerate(planned, 1):
         print(f"  {i:2d}. [{s['type']}] {s.get('title') or 'Group Meeting'}")
-    for w in WARNINGS:
-        print(f"WARNING: {w}")
+    show_warnings()
 
     if not args.no_validate:
         ok, report = deck_structure.validate(args, out, TEMPLATE)
@@ -1186,4 +1389,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        # A hard error often follows from a typo a warning names ("did you mean 'projects'?"), so show them.
+        show_warnings()
+        raise

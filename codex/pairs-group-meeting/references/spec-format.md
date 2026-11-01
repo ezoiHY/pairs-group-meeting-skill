@@ -13,6 +13,13 @@ against the spec file's own folder, so keep the spec next to the deck it builds.
 
 Every slide takes an optional `"notes"`: speaker notes, plain text.
 
+The build warns about every key it doesn't know — anywhere in the spec, with the closest valid
+name — and about `layout` / `valign` values outside the lists below. Such keys would otherwise be
+ignored, so a typo like `"bulets"` never silently drops content. Also: `null` means "not given"; a
+string where a list belongs (`"bullets": "…"`) is used as a one-item list, with a warning; colors
+are six hex digits, with or without a leading `#`; and `"cover": {…}` with a date or name becomes
+a cover slide. When the build stops on an error, the warnings so far are printed first.
+
 ## `cover`
 
 ```json
@@ -46,7 +53,7 @@ and for `done` a colored status after an em dash.
 | `projects[].name` | — | `**bold**` allowed. |
 | `projects[].label` | `Project: ` | Prefix before the name; `""` to drop it. |
 | `projects[].items[]` | — | A string, or `{"text", "status"}`. |
-| `status` (done only) | none | `done` / `finished` / `完成` → green (theme accent6); `on-going` / `ongoing` / `in progress` / `wip` / `进行中` → dark red `980000`. Any other text is shown as written in dark red. |
+| `status` (done only) | none | `done` / `finished` / `complete(d)` / `完成` / `已完成` → green "done" (theme accent6); `on-going` / `ongoing` / `wip` / `进行中` → dark red "on-going" (`980000`), `in progress` as written. Any other text is shown as written in dark red, and must be English. |
 
 Fitting: 28pt in the template's text box; if that overflows, the box widens to the full
 slide width, then the font steps down to the house minimum (`style.min_font_size`, 22pt). Past
@@ -78,12 +85,12 @@ least `style.min_font_size` (22pt); only the title (36pt) and the footnote (12pt
 | `title` | Required. 36pt white in the header band; widens, then shrinks to 24pt, to stay on one line. |
 | `subtitle` | One bold line under the header (24pt, down to 22pt) — the slide's takeaway as a plain sentence, or a paper's full title. |
 | `bullets` | Strings or `{"text", "level": 0/1, "bullet": false, "bold": true, "color": "980000"}`. `bullet: false` makes a plain paragraph. `**bold**` inline. 28pt down to 22pt when alone, 24pt down to 22pt next to a visual. The build warns above `style.max_bullets_per_slide` (3) bullets or `style.max_words_per_bullet` (14) words. |
-| `table` | `header` (optional), `rows`, optional `col_widths` (ratios), `align` (`left`/`center`/`right` per column), `font_size`. Cells are strings or `{"text", "bold", "color", "fill"}`. Font: 24pt or 22pt — the larger one when it fits without wrapping more cells, and never larger than the slide's bullets. At 22pt only ~4–6 short rows fit; for more numbers use a `chart`. Columns are sized for that font; a narrow table keeps its natural width and is centered. `font_size` forces a size (columns still sized for it) and warns if cells then wrap. |
+| `table` | `header` (optional), `rows`, optional `col_widths` (ratios), `align` (`left`/`center`/`right` per column), `font_size`. Cells are strings or `{"text", "bold", "color", "fill"}`. Font: 24pt or 22pt — the larger one when it fits without wrapping more cells, and never larger than the slide's bullets. At 22pt only ~4–6 short rows fit; for more numbers use a `chart`. Columns are sized for that font; a narrow table keeps its natural width and is centered. `font_size` forces a size (columns still sized for it) and warns if cells then wrap; it is never below the house minimum. `align` may also be one word for every column; `align` and `col_widths` should have one entry per column (the build warns otherwise). A table with no `rows` is left out with a warning. |
 | `media` | Strings (paths), `{"path", "caption", "poster", "page"}`, or `{"chart": {…}, "caption", "aspect"}`. Images: png, jpg, gif, bmp, tif, webp. `pdf` and `svg` are rasterized at 220 dpi (`page` picks a PDF page, default 1). Videos: mp4, m4v, mov, avi, wmv — embedded and playable in PowerPoint; the poster frame comes from macOS Quick Look unless `poster` names an image. Captions are 22pt, centered under the item — keep them to ≤ 8 words. |
 | `media[].chart` | A native, editable PowerPoint chart, laid out like an image (default `aspect` 1.6). `type`: `bar` (columns), `hbar`, `line`. `categories`: x labels. `series`: `[{"name", "values", "color"?}]` — a legend appears for 2+ series. `number_format`: Excel format for labels, e.g. `"0.0"`, `"0%"`, `"0.0\"°\""`. `labels` (default on for bars, off for lines): value labels, which also hide the value axis. `highlight`: category names drawn in the template's gold (single-series bars) — use it for "ours". `y_min` / `y_max`: axis range. |
 | `media_rows` | Force the number of media rows. Default: the row count that makes the media largest. |
 | `layout` | `auto` (default), `text-left`, `text-right`, `stack`, `fit`. `auto` = `text-left` when there are bullets and media but no table, else `stack`. `fit` = `stack` when every media item is wide (width/height ≥ 2.6), else `auto` — for figure-led slides such as a paper's pipeline. |
-| `text_width` | Bullet column share for `text-left` / `text-right` (default `0.38`). |
+| `text_width` | Bullet column share for `text-left` / `text-right`, between `0.15` and `0.75` (default `0.38`). |
 | `footnote` | Small gray 12pt line at bottom left, beside the logos — citations, data sources only. |
 | `text_only` | `true` silences the "no figure, demo video or chart" warning, for a genuine discussion slide. |
 | `valign` | `top` (default) or `middle`: center the whole block (subtitle, bullets, table, media) in the content area. For short slides without media that would otherwise leave an empty band at the bottom. The footnote stays put. |
@@ -116,6 +123,7 @@ its problem and approach, then its novelty and limitations side by side.
 | `full_title` | Subtitle of the first slide. |
 | `venue` | Footnote of the first slide, followed by `· pipeline figure from the paper`. |
 | `pipeline` | The authors' original pipeline figure: any `media` path (image, or `pdf` / `svg` rasterized). Required — the build warns without it. |
+| `pipeline_page` | For a PDF `pipeline`, the page the figure is on (default 1). `pipeline` may also be a `media` object, `{"path", "page"}`. |
 | `pipeline_caption` | Optional caption, ≤ 8 words. |
 | `problem`, `approach` | One short line each, shown as `**Problem:** …` and `**Approach:** …` beside (or above) the figure. Required. |
 | `novelty`, `limitations` | A string or a list; at most 2 points of ≤ `style.max_words_per_bullet` words each. They fill the two columns of the second slide, row by row. Required; a missing one drops its column. |
@@ -148,7 +156,7 @@ differ, then how the results differ. Methods come first; compare them before the
 | `theme` | Required. Slide titles are `Compare: <theme> — methods` and `Compare: <theme> — results`. |
 | `methods`, `results` | Each a `content` table — `header`, `rows`, optional `col_widths`, `align`, `font_size` (see `content`) — plus `takeaway` (the slide's subtitle). `methods` is required; without `results` the build warns. One row per paper, the paper's name in the first column. |
 | `results.note` | The slide's footnote: the benchmark and setting, and whether numbers are as reported. The build warns without it. |
-| `results.better` | Optional per-column `"lower"` / `"higher"` / `null`, overriding the header's arrows. By default a `↓` in the header means lower is better, `↑` higher. |
+| `results.better` | Optional per-column `"lower"` / `"higher"` / `null`, overriding the header's arrows — or one of those words for every column after the paper names. By default a `↓` in the header means lower is better, `↑` higher. |
 | `notes` | A string (methods slide) or a list of up to two strings (methods, results). |
 
 The best value of each column that has a `↓` / `↑` (or a `better` entry) is bolded automatically,
