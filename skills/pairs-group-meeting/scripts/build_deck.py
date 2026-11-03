@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import deck_structure  # noqa: E402
 from xml.sax.saxutils import escape
 
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
 from pptx import Presentation
 from pptx.oxml import parse_xml
 from pptx.oxml.ns import nsdecls, qn
@@ -80,8 +80,7 @@ FONTS_XML = (
 DONE_WORDS = {"done", "finished", "complete", "completed", "完成", "已完成"}
 ONGOING_WORDS = {"on-going", "ongoing", "in progress", "in-progress", "wip", "进行中"}
 
-IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff"}
-CONVERT_EXTS = {".webp"}
+EMBEDDABLE = {"PNG", "JPEG", "GIF", "BMP", "TIFF"}     # image formats python-pptx embeds, as Pillow names them
 RENDER_EXTS = {".pdf", ".svg"}
 VIDEO_MIME = {".mp4": "video/mp4", ".m4v": "video/x-m4v", ".mov": "video/quicktime",
               ".avi": "video/x-msvideo", ".wmv": "video/x-ms-wmv"}
@@ -266,6 +265,8 @@ def write_paragraphs(tx_body, paras, size):
         tx_body.remove(p)
     for p in paras:
         tx_body.append(parse_xml(p.xml(size)))
+    if not paras:
+        tx_body.append(parse_xml(f'<a:p {nsdecls("a")}/>'))   # PowerPoint rejects a text body with no paragraph
 
 
 def add_textbox(slide, box, name, anchor="t"):
@@ -491,26 +492,28 @@ def place_text(slide, paras, box, sizes, name, what):
 # Media
 
 
+def spec_file(value, base_dir, what):
+    """A file the spec names: ~ expanded, a relative path taken from the spec's folder."""
+    path = Path(os.path.expanduser(str(value)))
+    if not path.is_absolute():
+        path = (base_dir / path).resolve()
+    if not path.exists():
+        raise SystemExit(f"{what} not found: {path}")
+    return path
+
+
 def prepare_media(item, base_dir, work):
     item = {"path": item} if isinstance(item, str) else dict(item)
     if "chart" in item:
         item.update(kind="chart", aspect=float(item.get("aspect", 1.6)))
         return item
-    path = Path(os.path.expanduser(item["path"]))
-    if not path.is_absolute():
-        path = (base_dir / path).resolve()
-    if not path.exists():
-        raise SystemExit(f"media not found: {path}")
+    path = spec_file(item["path"], base_dir, "media")
     ext = path.suffix.lower()
     item["src"] = path
     if ext in VIDEO_MIME:
-        poster = item.get("poster")
-        poster = Path(os.path.expanduser(poster)) if poster else video_poster(path, work)
-        if not poster.is_absolute():
-            poster = (base_dir / poster).resolve()
-        with Image.open(poster) as im:
-            item["aspect"] = im.width / im.height
-        item.update(kind="video", poster=poster, mime=VIDEO_MIME[ext])
+        poster = spec_file(item["poster"], base_dir, "poster") if item.get("poster") else video_poster(path, work)
+        poster, aspect = embeddable_image(poster, work)
+        item.update(kind="video", poster=poster, mime=VIDEO_MIME[ext], aspect=aspect)
         return item
     if ext in RENDER_EXTS:
         import pymupdf
@@ -522,24 +525,52 @@ def prepare_media(item, base_dir, work):
         out = work / f"{path.stem}-{len(list(work.iterdir()))}.png"
         doc[number - 1].get_pixmap(dpi=220, alpha=False).save(out)
         path = out
-    elif ext in CONVERT_EXTS or ext not in IMAGE_EXTS:
-        out = work / f"{path.stem}-{len(list(work.iterdir()))}.png"
-        with Image.open(path) as im:
-            png_ready(im).save(out)
-        path = out
-    with Image.open(path) as im:
-        # Re-save only a photo whose EXIF says it is rotated; anything else goes in as it is, so a JPEG
-        # stays a JPEG and a GIF keeps its animation.
-        if im.getexif().get(EXIF_ORIENTATION, 1) != 1:
-            upright = png_ready(ImageOps.exif_transpose(im))
-            out = work / f"{path.stem}-upright-{len(list(work.iterdir()))}.png"
-            upright.save(out)
-            path = out
-            item["aspect"] = upright.width / upright.height
-        else:
-            item["aspect"] = im.width / im.height
-    item.update(kind="image", file=path)
+    path, aspect = embeddable_image(path, work)
+    item.update(kind="image", file=path, aspect=aspect)
     return item
+
+
+def embeddable_image(path, work):
+    """(file, aspect) of an upright image python-pptx can embed.
+
+    The format is read from the file, not its name. A file goes in as it is unless it has to be
+    converted or turned upright, so a JPEG stays a JPEG and a GIF keeps its animation.
+    """
+    try:
+        im = Image.open(path)
+    except UnidentifiedImageError:
+        converted = sips_jpeg(path, work)
+        if not converted:
+            raise SystemExit(f"can't use {path.name}: it is neither an image this builder reads nor a video "
+                             f"PowerPoint plays ({', '.join(sorted(VIDEO_MIME))}) — convert it to .png, .jpg "
+                             "or .mp4") from None
+        path, im = converted, Image.open(converted)
+    with im:
+        rotated = im.getexif().get(EXIF_ORIENTATION, 1) != 1
+        if im.format in EMBEDDABLE and not rotated:
+            return path, im.width / im.height
+        upright = ImageOps.exif_transpose(im) if rotated else im
+        if im.format in ("JPEG", "MPO"):
+            # A photo stays a JPEG. MPO is a phone JPEG with a depth or HDR map attached; its main image is kept.
+            rgb = upright.mode in ("RGB", "L")
+            out = work / f"{path.stem}-{len(list(work.iterdir()))}.jpg"
+            (upright if rgb else upright.convert("RGB")).save(
+                out, "JPEG", quality=92, icc_profile=im.info.get("icc_profile") if rgb else None)
+        else:
+            out = work / f"{path.stem}-{len(list(work.iterdir()))}.png"
+            png_ready(upright).save(out)
+        return out, upright.width / upright.height
+
+
+def sips_jpeg(path, work):
+    """A JPEG copy made by macOS's sips, which reads formats Pillow doesn't (HEIC photos); None elsewhere."""
+    out = work / f"{path.stem}-{len(list(work.iterdir()))}.jpg"
+    try:
+        subprocess.run(["sips", "-s", "format", "jpeg", "-s", "formatOptions", "high", str(path), "--out", str(out)],
+                       capture_output=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return out if out.exists() else None
 
 
 EXIF_ORIENTATION = 0x0112
@@ -580,7 +611,12 @@ def caption_height(text, width_emu, size=None):
 
 
 def media_layout(items, box, rows=None, valign="top", what="media"):
-    """Justified rows: each row spans the box width; rows are scaled together to fit its height."""
+    """Justified rows: each row spans the box width; rows are scaled together to fit its height.
+
+    Each item owns a cell as wide as the item at full scale. When the rows shrink to fit the height,
+    an item shrinks inside its cell and its caption keeps the cell's width, so a narrow (portrait)
+    item doesn't wrap its caption onto more and more lines and shrink itself further.
+    """
     x, y, w, h = box
     n = len(items)
     best = None
@@ -590,51 +626,41 @@ def media_layout(items, box, rows=None, valign="top", what="media"):
         for c in counts:
             group = items[idx:idx + c]
             row_h = (w - GAP * (c - 1)) / sum(it["aspect"] for it in group)
-            rows_spec.append((idx, c, row_h))
+            cap = max(caption_height(it.get("caption"), it["aspect"] * row_h) for it in group)
+            rows_spec.append((idx, c, row_h, cap))
             idx += c
-        # A smaller item wraps its caption onto more lines, so measure captions at the scaled width and
-        # shrink again until the two agree. The scale only ever goes down, so this settles in a few steps.
-        scale = 1.0
-        for _ in range(8):
-            fixed = GAP * (r - 1) + sum(max(caption_height(it.get("caption"), it["aspect"] * row_h * scale)
-                                            for it in items[i0:i0 + c]) for i0, c, row_h in rows_spec)
-            new = min(1.0, (h - fixed) / sum(rh for _, _, rh in rows_spec))
-            if new <= 0 or abs(new - scale) < 1e-4:
-                scale = new
-                break
-            scale = new
+        fixed = GAP * (r - 1) + sum(cap for *_, cap in rows_spec)
+        scale = min(1.0, (h - fixed) / sum(row_h for _, _, row_h, _ in rows_spec))
         if scale <= 0:
             continue
-        area = sum(it["aspect"] * (rh * scale) ** 2 for i0, c, rh in rows_spec for it in items[i0:i0 + c])
+        area = sum(it["aspect"] * (row_h * scale) ** 2 for i0, c, row_h, _ in rows_spec for it in items[i0:i0 + c])
         if best is None or area > best[0]:
             best = (area, rows_spec, scale)
     if best is None:
-        raise SystemExit("media do not fit: too many items for the space left on the slide")
+        raise SystemExit(f"{what}: the captions leave no room for the media — shorten the captions or use "
+                         "fewer media")
     _, rows_spec, scale = best
 
     placed, cy = [], y
-    for i0, c, row_h in rows_spec:
+    for i0, c, row_h, cap in rows_spec:
         rh = row_h * scale
-        group = items[i0:i0 + c]
-        row_w = sum(it["aspect"] * rh for it in group) + GAP * (c - 1)
-        cx = x + (w - row_w) / 2
-        cap = max(caption_height(it.get("caption"), it["aspect"] * rh) for it in group)
-        for it in group:
-            iw = it["aspect"] * rh
-            placed.append((it, (cx, cy, iw, rh), cap))
-            cx += iw + GAP
+        cx = x
+        for it in items[i0:i0 + c]:
+            cell, iw = it["aspect"] * row_h, it["aspect"] * rh
+            placed.append((it, (cx + (cell - iw) / 2, cy, iw, rh), (cx, cell), cap))
+            cx += cell + GAP
         cy += rh + cap + GAP
     used = cy - GAP - y
     if used > h + EMU_PER_PT:
         warn(f"{what}: figures and captions run {(used - h) / EMU_PER_IN:.2f}\" past the content area — "
              "shorten the captions or use fewer media")
     shift = max(0, (h - used) / 2) if valign == "middle" else 0
-    return [(it, (bx, by + shift, bw, bh), cap) for it, (bx, by, bw, bh), cap in placed], used
+    return [(it, (bx, by + shift, bw, bh), cell, cap) for it, (bx, by, bw, bh), cell, cap in placed], used
 
 
 def add_media(slide, items, box, rows=None, valign="top", what="media"):
     placed, used = media_layout(items, box, rows, valign, what)
-    for k, (it, (x, y, w, h), cap) in enumerate(placed, 1):
+    for k, (it, (x, y, w, h), (cell_x, cell_w), cap) in enumerate(placed, 1):
         x, y, w, h = int(x), int(y), int(w), int(h)
         if it["kind"] == "chart":
             add_chart(slide, it["chart"], (x, y, w, h), f"Chart {k}")
@@ -648,7 +674,7 @@ def add_media(slide, items, box, rows=None, valign="top", what="media"):
         if it["kind"] != "chart":
             shape._element.xpath("./*[1]/p:cNvPr")[0].set("descr", it.get("caption") or it["src"].name)
         if it.get("caption"):
-            tb = add_textbox(slide, (x - GAP / 2, y + h + 0.04 * EMU_PER_IN, w + GAP, cap), f"Caption {k}")
+            tb = add_textbox(slide, (cell_x - GAP / 2, y + h + 0.04 * EMU_PER_IN, cell_w + GAP, cap), f"Caption {k}")
             write_paragraphs(tb.text_frame._txBody, [Para(inline_runs(it["caption"], color=SLATE), algn="ctr",
                                                           color=SLATE)], STYLE["min_font_size"])
     return used
@@ -1049,6 +1075,10 @@ SPEC_KEYS = {
 }
 SPEC_VALUES = {"layout": {"auto", "text-left", "text-right", "stack", "fit"}, "valign": {"top", "middle"}}
 LIST_KEYS = {"bullets", "media", "extra_lines", "projects", "items", "highlight", "categories", "header"}
+# Keys that hold one line of text: a number there is used as text (a year as a series name), a list is
+# joined into one line.
+TEXT_KEYS = {"title", "subtitle", "name", "label", "text", "status", "caption", "footnote", "date", "theme",
+             "takeaway", "note", "full_title", "venue", "problem", "approach", "pipeline_caption"}
 HEX_RE = re.compile(r"[0-9A-Fa-f]{6}")
 
 
@@ -1066,6 +1096,11 @@ def check_keys(obj, kind, where):
         elif key in LIST_KEYS and isinstance(value, str):
             warn(f"{where}: {key} should be a list — used {value!r} as its only entry")
             obj[key] = [value]
+        elif key in TEXT_KEYS and isinstance(value, (int, float)) and not isinstance(value, bool):
+            obj[key] = str(value)
+        elif key in TEXT_KEYS and isinstance(value, list):
+            warn(f"{where}: {key} should be one line of text — joined the list into one")
+            obj[key] = " ".join(map(str, value))
         elif key in SPEC_VALUES and (not isinstance(value, str) or value not in SPEC_VALUES[key]):
             warn(f"{where}: {key} {value!r} is not one of {sorted(SPEC_VALUES[key])} — used the default")
             del obj[key]
@@ -1076,6 +1111,12 @@ def check_keys(obj, kind, where):
             else:
                 warn(f"{where}: {key} {value!r} is not a color like \"980000\" — used the default")
                 del obj[key]
+
+
+def need(obj, keys, message):
+    """Stop on an object that has none of `keys`; building would only crash on it later."""
+    if isinstance(obj, dict) and not any(k in obj for k in keys):
+        raise SystemExit(message)
 
 
 def check_spec(spec):
@@ -1094,25 +1135,41 @@ def check_spec(spec):
             continue
         where = f"slide {i} ({s.get('title') or s.get('theme') or kind})"
         check_keys(s, kind, where)
+        if kind == "paper" and isinstance(s.get("pipeline"), dict):
+            check_keys(s["pipeline"], "media", f"{where} pipeline")
+            need(s["pipeline"], ("path",), f"{where}: \"pipeline\" needs a \"path\"")
         for proj in s.get("projects", []):
             check_keys(proj, "project", where)
             for item in proj.get("items", []) if isinstance(proj, dict) else []:
                 check_keys(item, "item", where)
+                need(item, ("text",), f"{where}: every item needs a \"text\"")
+                if kind == "todo" and isinstance(item, dict) and item.get("status"):
+                    warn(f"{where}: Todo items have no status — {item['status']!r} is not shown")
         for b in s.get("bullets", []):
             check_keys(b, "bullet", where)
+            need(b, ("text",), f"{where}: every bullet needs a \"text\"")
         tables = [("table", s.get("table"))] if kind == "content" else []
         tables += [(k, s.get(k)) for k in ("methods", "results")] if kind == "compare" else []
         for table_kind, t in tables:
             check_keys(t, table_kind, f"{where} {table_kind}")
+            rows = t.get("rows") if isinstance(t, dict) else None
+            for j, row in enumerate(rows if isinstance(rows, list) else []):
+                if not isinstance(row, list):
+                    warn(f"{where} {table_kind}: a row should be a list of cells — used {row!r} as a one-cell row")
+                    rows[j] = [row]
             for row in ([t.get("header", [])] + list(t.get("rows", []))) if isinstance(t, dict) else []:
                 for cell in row:
                     check_keys(cell, "cell", f"{where} {table_kind}")
         for m in s.get("media", []):
             check_keys(m, "media", where)
+            need(m, ("path", "chart"), f"{where}: every media item needs a \"path\" (or a \"chart\")")
             chart = m.get("chart") if isinstance(m, dict) else None
             check_keys(chart, "chart", where)
+            need(chart, ("categories",), f"{where}: a chart needs \"categories\"")
+            need(chart, ("series",), f"{where}: a chart needs \"series\"")
             for ser in chart.get("series", []) if isinstance(chart, dict) else []:
                 check_keys(ser, "series", where)
+                need(ser, ("values",), f"{where}: every chart series needs \"values\"")
 
 
 def lint(s):
@@ -1360,38 +1417,49 @@ def main():
         out = root / f"{code}GroupMeeting" / f"{code}GroupMeeting.pptx"
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    deck_structure.build(args, TEMPLATE, [BASE_SLIDE[s["type"]] for s in planned], TEMPLATE_SLIDES, out)
+    # Build beside the deck and move it into place only once it is filled and checked, so a build that
+    # stops halfway never replaces the last good deck.
+    partial = out.with_name(f".{out.stem}.building{out.suffix}")
+    try:
+        deck_structure.build(args, TEMPLATE, [BASE_SLIDE[s["type"]] for s in planned], TEMPLATE_SLIDES, partial)
+        prs = Presentation(str(partial))
+        with tempfile.TemporaryDirectory(prefix="gm_media_") as tmp:
+            work = Path(tmp)
+            for slide, s in zip(prs.slides, planned):
+                if s["type"] == "cover":
+                    fill_cover(slide, s)
+                elif s["type"] in ("done", "todo"):
+                    fill_progress(slide, s, s["type"])
+                else:
+                    fill_content(slide, s, spec_path.parent, work)
+                if s.get("notes"):
+                    notes = s["notes"]
+                    slide.notes_slide.notes_text_frame.text = (
+                        "\n".join(map(str, notes)) if isinstance(notes, list) else str(notes))
+            prs.save(str(partial))
+        ok, report = (True, "") if args.no_validate else deck_structure.validate(args, partial, TEMPLATE)
+        if ok:
+            os.replace(partial, out)
+    finally:
+        partial.unlink(missing_ok=True)
 
-    prs = Presentation(str(out))
-    with tempfile.TemporaryDirectory(prefix="gm_media_") as tmp:
-        work = Path(tmp)
-        for slide, s in zip(prs.slides, planned):
-            if s["type"] == "cover":
-                fill_cover(slide, s)
-            elif s["type"] in ("done", "todo"):
-                fill_progress(slide, s, s["type"])
-            else:
-                fill_content(slide, s, spec_path.parent, work)
-            if s.get("notes"):
-                slide.notes_slide.notes_text_frame.text = s["notes"]
-        prs.save(str(out))
-
-    print(f"Wrote {out} ({len(planned)} slides)")
+    if ok:
+        print(f"Wrote {out} ({len(planned)} slides)")
+    else:
+        kept = "; the deck already there is unchanged" if out.exists() else ""
+        print(f"Did not write {out}: the built deck failed the check below{kept}")
     for i, s in enumerate(planned, 1):
         print(f"  {i:2d}. [{s['type']}] {s.get('title') or 'Group Meeting'}")
     show_warnings()
-
-    if not args.no_validate:
-        ok, report = deck_structure.validate(args, out, TEMPLATE)
+    if report:
         print(report)
-        if not ok:
-            sys.exit(1)
+    if not ok:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
     try:
         main()
-    except SystemExit:
-        # A hard error often follows from a typo a warning names ("did you mean 'projects'?"), so show them.
+    finally:
+        # A failure often follows from a typo a warning names ("did you mean 'path'?"), so always show them.
         show_warnings()
-        raise

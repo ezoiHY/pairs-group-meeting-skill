@@ -7,12 +7,13 @@ description: Make PAIRS Lab (HKUST-GZ) group-meeting slides — 组会PPT / 组�
 
 This skill knows the lab's template and conventions. The **pptx skill** does the file work:
 its `add_slide.py` and `clean.py` build the deck's structure from the template, and its
-`validate.py`, `slide_text.py` and visual-QA rules check the result. `scripts/build_deck.py`
-orchestrates both from a JSON spec, so every deck looks like the template without hand-editing XML.
+`validate.py` and visual-QA rules check the result. `scripts/build_deck.py` orchestrates both
+from a JSON spec, so every deck looks like the template without hand-editing XML.
 
 ```
 assets/template.pptx           the lab template (never edit it)
 scripts/build_deck.py          spec.json → .pptx (uses the pptx skill's scripts)
+scripts/slide_text.py          prints a deck's text, slide by slide
 scripts/render.py              .pptx → slide PNGs + overview, via PowerPoint (or LibreOffice)
 references/spec-format.md      the spec: slide types, every field, examples
 references/template-anatomy.md geometry, colors, fonts, XML — for hand edits only
@@ -80,7 +81,7 @@ What a group-meeting deck needs, and what to ask for if the user hasn't said:
 
 **Look at the previous deck.** Find the newest earlier deck in `output_root` (from the config):
 usually a `YYMMDDGroupMeeting/` folder, but older decks may be named differently (`260930组会.pptx`).
-Read it with `$SKILL_PY "$PPTX_SKILL/scripts/slide_text.py" <previous deck>` and find its Todo
+Read it with `$SKILL_PY <this skill>/scripts/slide_text.py <previous deck>` and find its Todo
 slide — older decks may title it differently ("To-Do List for the Next 7 Days"). Last meeting's
 Todo is this meeting's Done candidate list: if the user hasn't said what they did, propose it and
 let them mark each item done or on-going; if they have, use it only to ask about items they left
@@ -206,11 +207,14 @@ $SKILL_PY <this skill>/scripts/build_deck.py <meeting folder>/deck_spec.json --p
 
 It clones the template's sample slides in spec order with the pptx skill's `add_slide.py`, drops
 the originals with `clean.py`, fills every slide, and runs the pptx skill's `validate.py` against the
-template. It prints the slide list, then warnings. **Act on every warning**:
+template. It prints the slide list, then warnings. A build that stops on an error or fails the check
+leaves the deck already at the output path as it was. **Act on every warning**:
 
 | Warning | What to do |
 |---|---|
 | unknown key 'x' is ignored — did you mean 'y'? / layout or valign not one of … | Fix the spelling in the spec and rebuild. |
+| should be one line of text — joined / a row should be a list of cells | Check the joined line or the one-cell rows read right; otherwise fix the spec's shape and rebuild. |
+| Todo items have no status | Drop the status, or move the item to the Done slide if it is finished. |
 | list split into N slides | Usually items are too long: shorten them, or move detail to a results slide, and rebuild. Keep the split only if the content really is that long. |
 | text overflows its area | Cut words or split the slide — the font never goes below 22pt. |
 | table taller than the space | Turn it into a chart, or split the rows across two slides. |
@@ -227,10 +231,10 @@ template. It prints the slide list, then warnings. **Act on every warning**:
 ## Step 5 — QA (the pptx skill's rules)
 
 1. **Content**:
-   `$SKILL_PY "$PPTX_SKILL/scripts/slide_text.py" deck.pptx` — check order, typos, and that no
-   template text survived: `… | grep -nE "xxx|XXX|2026\.XX|^Name$"` must print nothing. Use this grep
-   instead of the pptx skill's leftover-text grep, whose `\bTODO` pattern matches this deck's own
-   `Todo` title.
+   `$SKILL_PY <this skill>/scripts/slide_text.py deck.pptx` lists every slide's text — check order,
+   typos, and that no template text survived: `… | grep -nE "xxx|XXX|2026\.XX|^Name$"` must print
+   nothing. Use this grep instead of the pptx skill's leftover-text grep, whose `\bTODO` pattern
+   matches this deck's own `Todo` title.
 2. **File**: the build already ran `validate.py --original <this skill>/assets/template.pptx`.
    Rerun it after any hand edit.
 3. **Visual**:

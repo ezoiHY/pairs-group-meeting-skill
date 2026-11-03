@@ -5,8 +5,7 @@ The Claude version (skills/pairs-group-meeting) is the source. SHARED files are
 copied unchanged. The Codex SKILL.md is generated from the Claude one: the parts
 about the pptx skill and Claude's tools are swapped for the Codex text below, and
 everything else (content to gather, deck plan, house style, spec, warnings) is
-kept word for word. The files only one version has (deck_structure.py,
-slide_text.py) are written by hand in each version.
+kept word for word. deck_structure.py is written by hand in each version.
 
 Usage:
     python tools/sync_codex.py           update the Codex version
@@ -24,6 +23,7 @@ CLAUDE = ROOT / "skills" / "pairs-group-meeting"
 CODEX = ROOT / "codex" / "pairs-group-meeting"
 SHARED = [
     "scripts/build_deck.py",
+    "scripts/slide_text.py",
     "scripts/render.py",
     "references/spec-format.md",
     "references/template-anatomy.md",
@@ -75,8 +75,9 @@ STEP0 = """## Step 0 — Set up
 STEP5 = """## Step 5 — QA
 
 1. **Content**:
-   `$SKILL_PY <this skill>/scripts/slide_text.py deck.pptx` — check order, typos, and that no
-   template text survived: `… | grep -nE "xxx|XXX|2026\\.XX|^Name$"` must print nothing.
+   `$SKILL_PY <this skill>/scripts/slide_text.py deck.pptx` lists every slide's text — check order,
+   typos, and that no template text survived: `… | grep -nE "xxx|XXX|2026\\.XX|^Name$"` must print
+   nothing.
 2. **File**: the build already checked that the deck reopens with every relationship intact.
    Rebuild after any change to the spec.
 3. **Visual**:
@@ -117,8 +118,6 @@ after each rebuild), and tell the user which slides were hand-edited.
 EDITS = [
     ("It drives the pptx skill for the actual file generation and QA.",
      "It builds and checks the file itself with python-pptx; no other skill is needed."),
-    ('`$SKILL_PY "$PPTX_SKILL/scripts/slide_text.py" <previous deck>`',
-     "`$SKILL_PY <this skill>/scripts/slide_text.py <previous deck>`"),
     ('build_deck.py <meeting folder>/deck_spec.json --pptx-skill "$PPTX_SKILL"',
      "build_deck.py <meeting folder>/deck_spec.json"),
     ("It clones the template's sample slides in spec order with the pptx skill's `add_slide.py`, drops\n"

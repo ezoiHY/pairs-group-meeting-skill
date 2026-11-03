@@ -16,6 +16,7 @@ from copy import deepcopy
 
 from pptx import Presentation
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
+from pptx.oxml.ns import qn
 
 R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 P14_CREATION_ID = "{http://schemas.microsoft.com/office/powerpoint/2010/main}creationId"
@@ -71,7 +72,8 @@ def build(args, template, sources, originals, out_path):
 
 
 def validate(args, out_path, template):
-    """(ok, report): the deck reopens, and every relationship a slide refers to exists."""
+    """(ok, report): the deck reopens, every relationship a slide refers to exists, and every text body
+    has a paragraph."""
     with zipfile.ZipFile(out_path) as zf:
         bad = zf.testzip()
         names = zf.namelist()
@@ -86,6 +88,9 @@ def validate(args, out_path, template):
             # A video's play action carries an empty r:id, as in PowerPoint's own files.
             if rid and rid not in slide.part.rels:
                 problems.append(f"slide {i} refers to missing relationship {rid}")
+        for body in slide._element.iter(qn("p:txBody"), qn("a:txBody")):
+            if body.find(qn("a:p")) is None:
+                problems.append(f"slide {i} has a text body with no paragraph, which PowerPoint rejects")
     if problems:
         return False, "Check FAILED:\n" + "\n".join(problems)
     return True, f"Check passed: the deck reopens cleanly ({len(prs.slides)} slides)."

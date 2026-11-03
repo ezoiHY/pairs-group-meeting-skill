@@ -200,11 +200,14 @@ $SKILL_PY <this skill>/scripts/build_deck.py <meeting folder>/deck_spec.json
 ```
 
 It clones the template's sample slides in spec order, drops the originals, fills every slide, and
-checks that the written deck reopens with every relationship intact. It prints the slide list, then warnings. **Act on every warning**:
+checks that the written deck reopens with every relationship intact. It prints the slide list, then warnings. A build that stops on an error or fails the check
+leaves the deck already at the output path as it was. **Act on every warning**:
 
 | Warning | What to do |
 |---|---|
 | unknown key 'x' is ignored — did you mean 'y'? / layout or valign not one of … | Fix the spelling in the spec and rebuild. |
+| should be one line of text — joined / a row should be a list of cells | Check the joined line or the one-cell rows read right; otherwise fix the spec's shape and rebuild. |
+| Todo items have no status | Drop the status, or move the item to the Done slide if it is finished. |
 | list split into N slides | Usually items are too long: shorten them, or move detail to a results slide, and rebuild. Keep the split only if the content really is that long. |
 | text overflows its area | Cut words or split the slide — the font never goes below 22pt. |
 | table taller than the space | Turn it into a chart, or split the rows across two slides. |
@@ -221,8 +224,9 @@ checks that the written deck reopens with every relationship intact. It prints t
 ## Step 5 — QA
 
 1. **Content**:
-   `$SKILL_PY <this skill>/scripts/slide_text.py deck.pptx` — check order, typos, and that no
-   template text survived: `… | grep -nE "xxx|XXX|2026\.XX|^Name$"` must print nothing.
+   `$SKILL_PY <this skill>/scripts/slide_text.py deck.pptx` lists every slide's text — check order,
+   typos, and that no template text survived: `… | grep -nE "xxx|XXX|2026\.XX|^Name$"` must print
+   nothing.
 2. **File**: the build already checked that the deck reopens with every relationship intact.
    Rebuild after any change to the spec.
 3. **Visual**:

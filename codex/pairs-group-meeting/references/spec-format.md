@@ -16,9 +16,14 @@ Every slide takes an optional `"notes"`: speaker notes, plain text.
 The build warns about every key it doesn't know — anywhere in the spec, with the closest valid
 name — and about `layout` / `valign` values outside the lists below. Such keys would otherwise be
 ignored, so a typo like `"bulets"` never silently drops content. Also: `null` means "not given"; a
-string where a list belongs (`"bullets": "…"`) is used as a one-item list, with a warning; colors
-are six hex digits, with or without a leading `#`; and `"cover": {…}` with a date or name becomes
-a cover slide. When the build stops on an error, the warnings so far are printed first.
+string where a list belongs (`"bullets": "…"`) is used as a one-item list, and a list where one line
+of text belongs (`"problem": ["…", "…"]`) is joined into one line, both with a warning; a number
+where text belongs (a year as a series name) is used as text; a table row given as a string is a
+one-cell row, with a warning; colors are six hex digits, with or without a leading `#`; and
+`"cover": {…}` with a date or name becomes a cover slide. A media item, chart, series, item or
+bullet missing the key it can't do without (`path`, `categories`, `values`, `text`…) stops the
+build. When the build stops on an error, the warnings so far are printed too, and the deck
+already at the output path is left as it was.
 
 ## `cover`
 
@@ -86,7 +91,7 @@ least `style.min_font_size` (22pt); only the title (36pt) and the footnote (12pt
 | `subtitle` | One bold line under the header (24pt, down to 22pt) — the slide's takeaway as a plain sentence, or a paper's full title. |
 | `bullets` | Strings or `{"text", "level": 0/1, "bullet": false, "bold": true, "color": "980000"}`. `bullet: false` makes a plain paragraph. `**bold**` inline. 28pt down to 22pt when alone, 24pt down to 22pt next to a visual. The build warns above `style.max_bullets_per_slide` (3) bullets or `style.max_words_per_bullet` (14) words. |
 | `table` | `header` (optional), `rows`, optional `col_widths` (ratios), `align` (`left`/`center`/`right` per column), `font_size`. Cells are strings or `{"text", "bold", "color", "fill"}`. Font: 24pt or 22pt — the larger one when it fits without wrapping more cells, and never larger than the slide's bullets. At 22pt only ~4–6 short rows fit; for more numbers use a `chart`. Columns are sized for that font; a narrow table keeps its natural width and is centered. `font_size` forces a size (columns still sized for it) and warns if cells then wrap; it is never below the house minimum. `align` may also be one word for every column; `align` and `col_widths` should have one entry per column (the build warns otherwise). A table with no `rows` is left out with a warning. |
-| `media` | Strings (paths), `{"path", "caption", "poster", "page"}`, or `{"chart": {…}, "caption", "aspect"}`. Images: png, jpg, gif, bmp, tif, webp. `pdf` and `svg` are rasterized at 220 dpi (`page` picks a PDF page, default 1). Videos: mp4, m4v, mov, avi, wmv — embedded and playable in PowerPoint; the poster frame comes from macOS Quick Look unless `poster` names an image. Captions are 22pt, centered under the item — keep them to ≤ 8 words. |
+| `media` | Strings (paths), `{"path", "caption", "poster", "page"}`, or `{"chart": {…}, "caption", "aspect"}`. Images: png, jpg, gif, bmp, tif, webp, and on macOS heic; the format is read from the file, and a rotated phone photo is turned upright (and stays a JPEG). `pdf` and `svg` are rasterized at 220 dpi (`page` picks a PDF page, default 1). Videos: mp4, m4v, mov, avi, wmv — embedded and playable in PowerPoint; the poster frame comes from macOS Quick Look unless `poster` names an image. Captions are 22pt, centered under the item — keep them to ≤ 8 words. |
 | `media[].chart` | A native, editable PowerPoint chart, laid out like an image (default `aspect` 1.6). `type`: `bar` (columns), `hbar`, `line`. `categories`: x labels. `series`: `[{"name", "values", "color"?}]` — a legend appears for 2+ series. `number_format`: Excel format for labels, e.g. `"0.0"`, `"0%"`, `"0.0\"°\""`. `labels` (default on for bars, off for lines): value labels, which also hide the value axis. `highlight`: category names drawn in the template's gold (single-series bars) — use it for "ours". `y_min` / `y_max`: axis range. |
 | `media_rows` | Force the number of media rows. Default: the row count that makes the media largest. |
 | `layout` | `auto` (default), `text-left`, `text-right`, `stack`, `fit`. `auto` = `text-left` when there are bullets and media but no table, else `stack`. `fit` = `stack` when every media item is wide (width/height ≥ 2.6), else `auto` — for figure-led slides such as a paper's pipeline. |

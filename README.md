@@ -311,13 +311,13 @@ skills/pairs-group-meeting/  the original version, for Claude Code
   assets/template.pptx       the lab template
   scripts/build_deck.py      spec.json → .pptx
   scripts/deck_structure.py  clones template slides with the pptx skill's add_slide/clean/validate
+  scripts/slide_text.py      prints a deck's text, slide by slide
   scripts/render.py          .pptx → slide PNGs + overview (PowerPoint or LibreOffice)
   references/                spec format, template geometry/colors/fonts
   config.json                presenter, output folder, house-style limits
 codex/pairs-group-meeting/   the Codex version
   SKILL.md                   generated from the original by tools/sync_codex.py
   scripts/deck_structure.py  clones template slides with python-pptx alone
-  scripts/slide_text.py      prints a deck's text, slide by slide
   …                          everything else is a copy of the original's
 tools/sync_codex.py          brings the Codex version up to date with the original
 examples/demo/               a demo spec with synthetic data
@@ -326,7 +326,6 @@ examples/papers/             paper-reading and paper-comparison slides, syntheti
 
 **Changing the skill:** edit the original in `skills/pairs-group-meeting/`, then run
 `python tools/sync_codex.py` to update the Codex version. `--check` exits non-zero if the Codex
-version is out of date. Only `deck_structure.py` and `slide_text.py` are edited by hand in
-`codex/`.
+version is out of date. Only `deck_structure.py` is edited by hand in `codex/`.
 
 The template, its backgrounds and the HKUST(GZ) and PAIRS Lab logos belong to their owners.
