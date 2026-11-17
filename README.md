@@ -1,11 +1,19 @@
 # PAIRS Lab Group Meeting Skill
 
-A Claude Code skill that turns your progress notes, figures, demo videos and numbers into
-**PAIRS Lab (HKUST-GZ) group-meeting slides** (组会 PPT) on the lab's own template. The actual
-`.pptx` generation and QA go through Anthropic's **pptx skill**.
+A Claude Code (and Codex) skill that turns your progress notes, figures, demo videos and numbers
+into **PAIRS Lab (HKUST-GZ) slides** on the lab's own template: group-meeting decks (组会 PPT) in
+the lab's **classic** look, and formal talks — defenses, conference and invited talks — in the
+editorial **paper** look. The actual `.pptx` generation and QA go through Anthropic's **pptx
+skill** (the Codex version builds the file itself).
 
-一个 Claude Code skill：把你两周的进展、结果图、demo 视频和实验数字，直接做成基于实验室模板的组会 PPT。
-真正生成 .pptx 和质量检查交给 Anthropic 官方的 pptx skill。
+一个 Claude Code / Codex skill：把你两周的进展、结果图、demo 视频和实验数字，直接做成基于实验室模板的 PPT。
+组会用实验室原版风格（classic），答辩、会议报告这类正式场合用论文风（paper）。
+真正生成 .pptx 和质量检查交给 Anthropic 官方的 pptx skill（Codex 版自己生成）。
+
+<img src="docs/images/two-looks.jpg" alt="The same slides in the classic and paper looks: cover, results chart, key message, timeline">
+
+<sub>The same spec in both looks — cover, a results chart, a key message, a timeline. Content pages are white in
+both; only covers and section dividers carry art. / 同一份 spec 的两种风格：内容页都是白底，只有封面和分节页有底图。</sub>
 
 ## 用哪个版本 / Which version
 
@@ -49,7 +57,8 @@ you see their poster frames. Spec: [`examples/real/spec.json`](examples/real/spe
 
 ### Full demo deck / 完整示例
 
-Rendered by PowerPoint from [`examples/demo/spec.json`](examples/demo/spec.json) (synthetic data).
+Rendered by PowerPoint from [`examples/demo/spec.json`](examples/demo/spec.json) (synthetic data),
+in the classic look.
 
 <table>
   <tr>
@@ -75,7 +84,7 @@ Rendered by PowerPoint from [`examples/demo/spec.json`](examples/demo/spec.json)
 ### Paper reading and comparison / 论文汇报与对比
 
 Rendered by PowerPoint from [`examples/papers/spec.json`](examples/papers/spec.json) (synthetic papers
-and numbers).
+and numbers), in the classic look.
 
 <table>
   <tr>
@@ -147,9 +156,10 @@ slide number.
 
 ### Two looks / 两种风格
 
-The same spec builds in either theme — set `"theme"` in the spec or in your config, or pass
-`--theme` to try the other. Content pages are white in both; only covers and section dividers
-carry art.
+The same spec builds in either theme — set `"theme"` in the spec or in your config, pass
+`--theme` to try the other, or just ask Claude for the deck "in paper too". Content pages are white
+in both; only covers and section dividers carry art, and variety comes from the page forms above
+rather than from page colors.
 
 | Theme | Look | For |
 |---|---|---|
@@ -240,10 +250,17 @@ Just ask Claude Code or Codex, in Chinese or English (in Codex you can also call
 Claude collects what's missing, plans the slides, writes a deck spec, builds it, renders every slide
 and checks it before handing you the `.pptx`.
 
+For a formal talk, say what the occasion is; it takes the paper look, with the talk's title on the
+cover, an outline, sections and a closing slide:
+
+> 下周三在 ICRA 做 15 分钟口头报告，题目 Seeing Hands Through Occlusion，用 paper 风格。
+> 主要讲三件事：多模态采集系统、融合模型、遮挡下的结果，材料都在 ~/talk/ 里。
+
 You can also build a spec by hand:
 
 ```bash
 python skills/pairs-group-meeting/scripts/build_deck.py examples/demo/spec.json
+python skills/pairs-group-meeting/scripts/build_deck.py examples/demo/spec.json --theme paper -o build/demo/paper.pptx
 python skills/pairs-group-meeting/scripts/render.py build/demo/261029GroupMeeting.pptx
 ```
 
@@ -260,7 +277,7 @@ The spec format is documented in [`references/spec-format.md`](skills/pairs-grou
 
 ## 组会汇报怎么做
 
-这一节说明：用这个 skill 做一次组会汇报，你要准备什么、PPT 怎么排、论文怎么讲。
+这一节说明：用这个 skill 做一次组会汇报（或者一场正式报告），你要准备什么、PPT 怎么排、论文怎么讲。
 PPT 本身是全英文的，你对 Claude 说中文、贴中文笔记都可以，它会翻译。
 下面说的"Claude"，用 Codex 版时就是 Codex，做法完全一样。
 
@@ -269,6 +286,9 @@ PPT 本身是全英文的，你对 Claude 说中文、贴中文笔记都可以�
 1. 对 Claude Code 或 Codex 说一句话：会议日期、这两周做了什么、结果图和 demo 视频的路径（见上面 Use 里的例子）。
 2. Claude 一次性问清缺的东西：哪些结果还没有图、论文还缺哪几项、上次的 Todo 哪些做完了。
 3. 它写出 `deck_spec.json`，构建 `.pptx`，用 PowerPoint 渲染每一页并检查，然后交给你。
+   第一次在某个项目里渲染时，PowerPoint 会弹一次"授予文件访问权限"：点"选择…"，选中项目里的
+   `.office-render` 文件夹（隐藏文件夹，按 ⌘⇧. 显示），或者直接选项目文件夹本身，再点"授予访问权限"。
+   之后这个项目不会再问，渲染时 PowerPoint 也不会跳到前台。
 4. 想改的话，直接改 `deck_spec.json` 再重新构建：
 
    ```bash
@@ -284,13 +304,29 @@ PPT 本身是全英文的，你对 Claude 说中文、贴中文笔记都可以�
 |---|---|---|
 | 1 | Cover | 日期和你的名字 |
 | 2 | Done last two weeks | 按项目分组，每条标 done 或 on-going |
-| 3 | Results | 一页一个结论，配图 / 图表 / demo 视频，数量按工作量定 |
+| 3 | Results | 一页一个结论，配图 / 图表 / demo 视频，数量按工作量定。最想让大家记住的那个结果可以单独做一页核心结论（statement），实验装置照片或 demo 可以做半页照片页（split） |
 | 4 | Paper reading | 可选。每篇论文 2 页 |
 | 5 | Paper comparison | 可选。读了 2 篇以上才有，放在论文之后 |
-| 6 | Todo | 下两周要做的事 |
+| 6 | Todo | 下两周要做的事；带日期的里程碑可以做成时间线（timeline） |
 
 一般 8–14 页，每页讲 1.5–2 分钟。讲两个以上项目、或者有论文部分时，每部分前面加一页分节页（section），
-后面每页的页脚会显示这一部分的名字。
+后面每页的页脚会显示这一部分的名字；有三个或更多部分时，封面后加一页目录（agenda），它会自动列出各个分节。
+
+### 正式场合怎么排（paper 风格）
+
+答辩、会议报告、受邀报告用 paper 风格，顺序一般是：
+
+| 顺序 | 页 | 内容 |
+|---|---|---|
+| 1 | Cover | 报告题目（不是 Group Meeting）、日期、名字，再加一行场合或单位；右侧可以放一张照片 |
+| 2 | Outline | 目录，自动列出各个分节 |
+| 3 | 各部分 | 每部分前一页分节页；长报告可以在每部分前再放一次目录，高亮当前讲到的那一节 |
+| 4 | Key message | 全场最重要的一两个结论，一句话放大，配上数字 |
+| 5 | Columns | 贡献点、方法的几个模块、几种实验条件，每栏一个小标题加一行字 |
+| 6 | Timeline | 研究计划或路线，可选 |
+| 7 | Closing | Thank you / Questions，加一两行联系方式 |
+
+页数按时长定，每页讲 1.5–2 分钟，比如 15 分钟的会议报告大约 8–10 页。规矩和组会一样：全英文、正文不小于 22pt、一页一个结论。
 
 ### 风格
 
@@ -319,7 +355,8 @@ PPT 本身是全英文的，你对 Claude 说中文、贴中文笔记都可以�
 |---|---|
 | Done | 上次组会以来做了什么，按项目分组，哪些完成、哪些还在做。Claude 会读上一次 PPT 的 Todo，当作这次 Done 的候选 |
 | Results | 每个结果的图、截图或 demo 视频，加一句你想让大家记住的结论。只有数字也行，会做成图表 |
-| Todo | 下两周的计划，有截止日期就写上 |
+| 照片（可选） | 实验装置、机器人或 demo 截图：可以做成半页照片页，paper 风格的封面也能放。只用你给的照片，不会去网上找图 |
+| Todo | 下两周的计划，有截止日期就写上；带日期的计划可以做成时间线 |
 | 论文 | 见下面两节 |
 
 ### 4. 讲一篇论文
@@ -364,6 +401,7 @@ PPT 本身是全英文的，你对 Claude 说中文、贴中文笔记都可以�
 - **正文不小于 22pt**：放不下就删字或拆页，不缩字号
 - **少字**：一页一个结论，一行副标题讲结论，最多 3 条要点，每条不超过 14 个词
 - **结果页要有图**：图、图表或 demo 视频；论文对比页是例外，只放表格
+- **内容页白底**：两种风格的内容页都是白底；想让 PPT 不单调，就换页面形式（目录、核心结论、并列、时间线、半页照片），不换底色
 - **细节放 notes**：想多讲的话写在 speaker notes 里，不要塞进页面
 
 ### 7. 构建时的 WARNING
