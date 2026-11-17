@@ -92,20 +92,69 @@ and numbers).
   </tr>
 </table>
 
+### More page forms, two looks / 更多页面形式，两种风格
+
+Rendered by PowerPoint from [`examples/layouts/spec.json`](examples/layouts/spec.json) (synthetic
+numbers), in `paper` (formal talks) and `classic` (group meetings).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/forms-1-statement-paper.jpg" alt="Key result statement, paper look"><br>
+      <sub><b>Key message</b> (paper) — the number and the sentence it stands for</sub></td>
+    <td width="50%"><img src="docs/images/forms-2-statement-classic.jpg" alt="Key result statement, classic look"><br>
+      <sub><b>The same slide</b> (classic) — the lab's gold bar instead of a hairline</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/forms-3-columns-charts.jpg" alt="Three columns with a chart each"><br>
+      <sub><b>Columns</b> (classic) — one result under three conditions, a chart each</sub></td>
+    <td width="50%"><img src="docs/images/forms-4-columns-text.jpg" alt="Three text columns"><br>
+      <sub><b>Columns</b> (paper) — three points, hairlines instead of boxes</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/forms-5-timeline.jpg" alt="Timeline of milestones"><br>
+      <sub><b>Timeline</b> (classic) — done, now, next</sub></td>
+    <td width="50%"><img src="docs/images/forms-6-agenda.jpg" alt="Outline slide"><br>
+      <sub><b>Outline</b> (paper) — read from the deck's own sections</sub></td>
+  </tr>
+</table>
+
+A photo or demo video can also fill half a slide out to its edge (`"layout": "split"`), and a
+formal talk ends on a `closing` slide.
+
 ## What it makes
 
 | Slide | What goes on it |
 |---|---|
-| Cover | "Group Meeting", date, presenter — the template cover |
+| Cover | "Group Meeting" (or the talk's title), date, presenter — and, in the paper look, a photo of your robot or setup |
+| Outline | The deck's parts, numbered; repeated before each part, it shows where the talk is |
+| Section | A divider that opens each project or the paper reading; the slides after it show its name in the footer |
 | Done last two weeks | Items grouped by project, lettered `a. b. c.`, status in green (**done**) or red (**on-going**) |
-| Results | A one-line takeaway, up to 3 short bullets, and figures / embedded demo videos / native PowerPoint charts |
+| Results | A one-line takeaway, up to 3 short bullets, and figures / embedded demo videos / native PowerPoint charts — or one photo or video filling half the slide out to its edge (`split`) |
+| Key message | One sentence set large, with the number it is about (`36%`) |
+| Columns | Two to four parallel points — contributions, conditions, method parts — each a heading, a line and optionally a small chart, with hairlines instead of boxes |
+| Timeline | Milestones or steps along a line, done / now / next |
 | Paper reading | Per paper: the authors' original pipeline figure with its problem and approach, then novelty and limitations side by side — all supplied by you, never guessed |
 | Paper comparison | Per theme of 3–5 papers: a methods table, then a results table (best value bolded) — tables only, no figures. Example: [`examples/papers/spec.json`](examples/papers/spec.json) (synthetic) |
 | Todo | Next steps per project |
+| Closing | "Thank you" and a line or two, on the cover's page — for formal talks |
+
+Every new page form is shown in [`examples/layouts/spec.json`](examples/layouts/spec.json).
 
 Every slide is cloned from the template, so the background, header band and HKUST(GZ) / PAIRS Lab
 logos are always right. Figures are laid out automatically, videos play in PowerPoint, charts stay
-editable, and long Done lists split across slides by themselves.
+editable, long Done lists split across slides by themselves, and every content slide carries its
+slide number.
+
+### Two looks / 两种风格
+
+The same spec builds in either theme — set `"theme"` in the spec or in your config, or pass
+`--theme` to try the other. Content pages are white in both; only covers and section dividers
+carry art.
+
+| Theme | Look | For |
+|---|---|---|
+| `classic` (default) | The lab template: navy header band with radar rings, white pages, sections on navy | Group meetings |
+| `paper` | Editorial: white pages, Georgia titles and headings, ruled tables, the lab's rings on cover and sections, a photo panel on the cover | Formal talks: defenses, conference and invited talks |
 
 ### House style
 
@@ -126,7 +175,9 @@ warns about the rest:
   The Codex version doesn't need it.
 - Python ≥ 3.10 with `pip install -r skills/pairs-group-meeting/requirements.txt`
   (python-pptx, lxml, defusedxml, Pillow, PyMuPDF)
-- For visual QA: **Microsoft PowerPoint for Mac** (exact renders through AppleScript) or LibreOffice
+- For visual QA: **Microsoft PowerPoint for Mac** (exact renders through AppleScript) or LibreOffice.
+  PowerPoint renders through one folder per project, `.office-render`, so it asks for file access
+  only once per project (see [office-render-skill](https://github.com/ezoiHY/office-render-skill))
 
 ## Install
 
@@ -167,12 +218,13 @@ overwrites it, and both versions share it. You can also write it yourself:
 ```json
 {
   "presenter": "Your Name",
-  "output_root": "~/Documents/PairsLab"
+  "output_root": "~/Documents/PairsLab",
+  "theme": "classic"
 }
 ```
 
-Any key here overrides the skill's `config.json`, which holds the lab defaults (list titles and the
-house-style limits).
+Any key here overrides the skill's `config.json`, which holds the lab defaults (theme, list titles
+and the house-style limits).
 
 Decks are written to `<output_root>/<YYMMDD>GroupMeeting/<YYMMDD>GroupMeeting.pptx`, next to the
 `deck_spec.json` they were built from, so you can tweak the spec and rebuild.
@@ -194,6 +246,11 @@ You can also build a spec by hand:
 python skills/pairs-group-meeting/scripts/build_deck.py examples/demo/spec.json
 python skills/pairs-group-meeting/scripts/render.py build/demo/261029GroupMeeting.pptx
 ```
+
+The first render in a project exits with code 3 and asks you to run
+`python3 skills/pairs-group-meeting/scripts/office_render.py --grant` once. PowerPoint then shows
+"Grant File Access": click Select…, select the hidden `.office-render` folder (⌘⇧. shows it) or the
+project folder, then click Grant Access. It never asks again for that project.
 
 With the Codex version, use `codex/pairs-group-meeting/scripts/` instead of
 `skills/pairs-group-meeting/scripts/`.
@@ -232,7 +289,29 @@ PPT 本身是全英文的，你对 Claude 说中文、贴中文笔记都可以�
 | 5 | Paper comparison | 可选。读了 2 篇以上才有，放在论文之后 |
 | 6 | Todo | 下两周要做的事 |
 
-一般 8–14 页，每页讲 1.5–2 分钟。
+一般 8–14 页，每页讲 1.5–2 分钟。讲两个以上项目、或者有论文部分时，每部分前面加一页分节页（section），
+后面每页的页脚会显示这一部分的名字。
+
+### 风格
+
+同一份 spec 可以换两种风格（主题），内容不用改。两种风格的内容页都是白底，只有封面和分节页有底图：
+
+- **classic**（默认）：实验室模板，深蓝标题栏 + 雷达环，白色内容页，分节页是深蓝底。用于组会
+- **paper**：杂志/论文风，白底、衬线标题（Georgia）、三线表，封面和分节页用实验室的同心环，封面可以放照片。用于更正式的场合：答辩、会议报告、受邀报告
+
+在 spec 里写 `"theme": "paper"`，或者在 `~/.config/pairs-group-meeting/config.json` 里设成你的默认。
+想先比较一下，就对 Claude 说"用 paper 再出一版"。
+
+让 PPT 不单调，靠的是换页面形式，而不是换底色：
+
+- **目录**（`agenda`）：自动列出各个分节；正式报告里每节前重复一次，高亮当前讲到的那一节
+- **核心结论**（`statement`）：一句话放大，配上它说的那个数字，比如"36%"。留给最想让大家记住的一两个结果
+- **并列要点**（`columns`）：2–4 栏，每栏一个小标题加一行字，可以各配一张小图表；适合贡献点、几种条件、方法的几个部分
+- **照片和 demo**（`"layout": "split"`）：照片或视频占满半页、一直延伸到页面边缘，文字在另一边
+- **时间线**（`timeline`）：里程碑或步骤，分完成 / 进行中 / 计划中
+- **结尾页**（`closing`）：Thank you + 一两行，正式报告用
+- paper 的封面可以放一张照片（机器人、实验装置、demo 截图）：cover 里加 `"image"`
+- 图表颜色交给主题；要把基线/"before" 压暗写 `"color": "muted"`，突出自己的结果用 `highlight`
 
 ### 3. 你需要准备什么
 
@@ -308,24 +387,31 @@ PPT 本身是全英文的，你对 Claude 说中文、贴中文笔记都可以�
 .claude-plugin/              plugin + marketplace manifests (Claude Code)
 skills/pairs-group-meeting/  the original version, for Claude Code
   SKILL.md                   workflow and house style Claude follows
-  assets/template.pptx       the lab template
+  assets/template.pptx       the lab template, with sample slides for every theme
   scripts/build_deck.py      spec.json → .pptx
   scripts/deck_structure.py  clones template slides with the pptx skill's add_slide/clean/validate
   scripts/slide_text.py      prints a deck's text, slide by slide
   scripts/render.py          .pptx → slide PNGs + overview (PowerPoint or LibreOffice)
+  scripts/office_render.py   PowerPoint through one once-granted folder per project (copy of office-render-skill)
+  assets/blank.pptx          the deck office_render.py --grant exports
   references/                spec format, template geometry/colors/fonts
-  config.json                presenter, output folder, house-style limits
+  config.json                presenter, output folder, theme, house-style limits
 codex/pairs-group-meeting/   the Codex version
   SKILL.md                   generated from the original by tools/sync_codex.py
   scripts/deck_structure.py  clones template slides with python-pptx alone
   …                          everything else is a copy of the original's
 tools/sync_codex.py          brings the Codex version up to date with the original
+tools/make_template.py       makes assets/template.pptx: the lab template + every theme's sample slides
+tools/template/              its sources: the lab's original template and the lab's logos
 examples/demo/               a demo spec with synthetic data
 examples/papers/             paper-reading and paper-comparison slides, synthetic data
+examples/layouts/            outline, key message, columns, timeline and closing slides, synthetic data
 ```
 
 **Changing the skill:** edit the original in `skills/pairs-group-meeting/`, then run
 `python tools/sync_codex.py` to update the Codex version. `--check` exits non-zero if the Codex
-version is out of date. Only `deck_structure.py` is edited by hand in `codex/`.
+version is out of date. Only `deck_structure.py` is edited by hand in `codex/`. To change a theme's
+art or add a theme, edit `tools/make_template.py` (and `THEMES` in `build_deck.py`), run it, then
+`tools/sync_codex.py`; it needs numpy on top of the skill's requirements.
 
 The template, its backgrounds and the HKUST(GZ) and PAIRS Lab logos belong to their owners.

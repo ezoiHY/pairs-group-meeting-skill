@@ -1,6 +1,6 @@
 ---
 name: pairs-group-meeting
-description: Make PAIRS Lab (HKUST-GZ) group-meeting slides — 组会PPT / 组会汇报 — as a .pptx built on the lab's own template, with the cover, "Done last two weeks" progress list with done/on-going status, results slides with figures, demo videos and tables, paper-reading slides (the paper's own pipeline figure plus problem, approach, novelty, limitations), multi-paper comparison tables, and the Todo list. Use this whenever the user wants slides for a group meeting, lab meeting, weekly or biweekly progress report, or 组会, or asks to turn progress notes, experiment results, plots or videos into meeting slides, even if they don't mention the template or PowerPoint. It builds and checks the file itself with python-pptx; no other skill is needed.
+description: Make PAIRS Lab (HKUST-GZ) slides — 组会PPT / 组会汇报, and formal lab talks — as a .pptx built on the lab's own template, in the lab's classic look for group meetings or the editorial paper look for formal occasions (defenses, conference and invited talks), always on white content pages. It makes the cover, an outline, section dividers, the "Done last two weeks" progress list with done/on-going status, results slides with figures, demo videos, native charts and tables, photo-led split layouts, big key-message slides, side-by-side columns, timelines of milestones, paper-reading slides (the paper's own pipeline figure plus problem, approach, novelty, limitations), multi-paper comparison tables, the Todo list and a closing slide. Use this whenever the user wants slides for a group meeting, lab meeting, weekly or biweekly progress report, 组会, or a lab talk, or asks to turn progress notes, experiment results, plots or videos into slides, even if they don't mention the template or PowerPoint. It builds and checks the file itself with python-pptx; no other skill is needed.
 ---
 
 # PAIRS Lab group-meeting deck (Codex version)
@@ -11,14 +11,15 @@ is a clone of one of the template's sample slides, so every deck looks like the 
 hand-editing XML.
 
 ```
-assets/template.pptx           the lab template (never edit it)
+assets/template.pptx           the lab template, with sample slides for every theme (never edit it)
 scripts/build_deck.py          spec.json → .pptx
 scripts/deck_structure.py      clones the template's slides and checks the written file
 scripts/slide_text.py          prints a deck's text, slide by slide
 scripts/render.py              .pptx → slide PNGs + overview, via PowerPoint (or LibreOffice)
+scripts/office_render.py       PowerPoint through one render folder per project, granted once (render.py uses it)
 references/spec-format.md      the spec: slide types, every field, examples
 references/template-anatomy.md geometry, colors, fonts, XML — for hand edits only
-config.json                    lab defaults: output folder, list titles, house style limits
+config.json                    lab defaults: output folder, theme, list titles, house style limits
 ~/.config/pairs-group-meeting/config.json   the user's own settings (presenter…), outside the skill
 requirements.txt               Python packages the scripts need
 ```
@@ -101,6 +102,46 @@ The lab's standard order, which the template is built around:
    Methods first, results second, tables only.
 6. **Todo**.
 
+Then, for a deck that doesn't feel like the same slide twelve times, pick the page form that fits
+each message (fields in `references/spec-format.md`):
+
+- **Sections.** When the deck covers two or more projects, or has a paper-reading part, open each
+  part with a `section` slide — the project's name and one line on it (`Paper reading` for the
+  papers). Every slide after it shows that name in its footer. A one-project deck needs none.
+- **Outline.** With three or more parts, an `agenda` after the cover lists them (it reads the
+  section titles itself). In a long formal talk, repeat it before each part with `current` set.
+- **The key result.** The one or two results the audience must remember get a `statement`: the
+  sentence large, with the number it is about (`36%`) when there is one. Not for every result.
+- **Parallel points.** Contributions, challenges, the parts of a method or one result under two to
+  four conditions: a `columns` slide (heading + a line, optionally a small chart or image each)
+  rather than bullets.
+- **Photos and demos.** A setup or robot photo, or a demo video with two lines on what to watch:
+  `"layout": "split"` (or `split-left`) — the picture fills half the slide out to its edge.
+- **Plans with dates.** Milestones toward a deadline, or the steps of a pipeline without a figure: a
+  `timeline` (done / now / next). The usual Todo list stays a `todo`.
+- **Cover photo.** `paper` covers take an `image` — the robot, the setup, a demo frame. Use one the
+  user gave you or ask whether they have one; never use a stock picture.
+- **Formal talks** (`paper`): the talk's own `title` on the cover with the event in `extra_lines`, an
+  `agenda`, sections, and a `closing` slide at the end.
+
+Every content page is white in both looks; variety comes from these forms, not from page colors.
+
+## Looks (themes)
+
+The look is a theme; the content and the spec stay the same. `classic`, the lab template, is the
+default and the look for group meetings. Use `paper` for formal occasions — a defense, a
+conference or invited talk, a review — when the user asks for another style, or when their config
+sets it (`"theme": "paper"` in `~/.config/pairs-group-meeting/config.json` makes it their default).
+
+| Theme | Feel | For |
+|---|---|---|
+| `classic` | The lab template: navy header band with radar rings, white pages, sections on navy | Group meetings; the default |
+| `paper` | Editorial: white pages, Georgia titles and headings, ruled tables, the lab's rings on cover and sections, a photo panel on the cover | Formal talks |
+
+To let the user choose, build the same spec a second time with `--theme <name> -o <other file>`
+and render both. Leave colors to the theme: give chart series no `color` (or `"muted"` for a
+baseline, `"accent"` for ours), and every slide stays right in both themes.
+
 ## House style (the lab's defaults — follow them)
 
 `config.json` → `style` holds the numbers below; the builder enforces the font floor and warns on
@@ -145,24 +186,29 @@ the rest.
 ## Step 3 — Write the spec
 
 Write `deck_spec.json` in the meeting folder (`<output_root>/<YYMMDD>GroupMeeting/`), so the user
-can tweak and rebuild it later. Read `references/spec-format.md` for every field. In short:
+can tweak and rebuild it later. If that folder already has one — the user wants changes to a deck
+built before — read it and edit it rather than starting over, so nothing they adjusted is lost. Read `references/spec-format.md` for every field. In short:
 
 ```json
-{"slides": [
+{"theme": "classic", "slides": [
   {"type": "cover", "date": "2026.10.29"},
   {"type": "done", "projects": [{"name": "Vision-EMG", "items": [
      {"text": "Collected 1h+ synchronized data", "status": "done"},
      {"text": "Fusion model training", "status": "on-going"}]}]},
+  {"type": "section", "title": "Vision-EMG Hand Pose", "subtitle": "Muscle signals fill in occluded joints"},
   {"type": "content", "title": "Occlusion results", "subtitle": "Fusion cuts occluded error by 36%",
    "bullets": ["Biggest gain where vision fails", "Non-occluded accuracy also improves"],
    "media": [{"chart": {"type": "bar", "categories": ["Occluded", "Non-occluded"],
-                        "series": [{"name": "Vision only", "values": [14.9, 8.1]},
+                        "series": [{"name": "Vision only", "values": [14.9, 8.1], "color": "muted"},
                                    {"name": "Vision + EMG", "values": [9.6, 7.1]}],
                         "number_format": "0.0\"°\""},
               "caption": "Joint angle MAE, lower is better"}]},
-  {"type": "content", "title": "Demo: fusion under occlusion",
+  {"type": "content", "title": "Demo: fusion under occlusion", "layout": "split",
    "subtitle": "The fused hand keeps all five fingers when vision loses them",
-   "media": [{"path": "/abs/path/demo.mp4", "caption": "Watch the index finger during the grasp"}]},
+   "bullets": ["Watch the index finger during the grasp"],
+   "media": [{"path": "/abs/path/demo.mp4"}]},
+  {"type": "statement", "title": "Key result", "number": "36%",
+   "text": "Lower occluded error when EMG joins the camera"},
   {"type": "todo", "projects": [{"name": "Vision-EMG", "items": ["Multi-subject collection by 11.05"]}]}
 ]}
 ```
@@ -220,6 +266,17 @@ leaves the deck already at the output path as it was. **Act on every warning**:
 | comparison: no results table / no `note` | Ask for numbers on a shared benchmark, and for which benchmark and setting they come from. |
 | no presenter name | Ask for it; save it in `~/.config/pairs-group-meeting/config.json`. |
 | no poster frame | Give the video a `"poster"` image. |
+| theme 'x' is not one of … / the midnight theme is gone | Use `classic` or `paper`. |
+| "tone" is gone | Drop the key: every content page is white now; for a demo, try `"layout": "split"`. |
+| the classic theme's cover (closing slide) has no place for an image | Drop `image`, or offer `paper` if the user wants a cover photo. |
+| the split layout needs a photo or video and no table / shows one photo or video | Give it exactly one photo or video, and move the table to its own slide. |
+| agenda has no items and the deck has no section slides | Add `section` slides (or `items`); or drop the agenda — a one-part deck needs none. |
+| statement / column / step text over N words, N columns, N points | Cut to the key words, or split the slide. |
+| series … color … barely shows / text color … is hard to read | Drop the `color` so the theme picks it, or use a palette word (`muted`, `accent`). |
+| section title too long / section subtitle over N words | Shorten it to the part's name and one short line. |
+| the cover says … but the spec sits in … | Ask which date is right; fix the cover date, or move the spec to the right meeting folder. |
+| … has no page N | Fix `page` / `pipeline_page`: the figure is on another page of that PDF. |
+| font X not found locally | Text fitting was estimated; look hard at the render for overflow. |
 
 ## Step 5 — QA
 
@@ -231,13 +288,26 @@ leaves the deck already at the output path as it was. **Act on every warning**:
    Rebuild after any change to the spec.
 3. **Visual**:
    ```bash
-   $SKILL_PY <this skill>/scripts/render.py deck.pptx
+   $SKILL_PY <this skill>/scripts/render.py deck.pptx --project <your working directory>
    ```
-   On macOS this opens the deck in PowerPoint for a few seconds (up to a minute with large videos)
-   and exports exact renders; elsewhere it uses LibreOffice. PowerPoint is driven through
-   AppleScript, which a sandbox may block — if the render fails with a permission or sandbox error,
-   ask the user to approve running it outside the sandbox. It prints one PNG per slide and an
-   overview sheet. Look at every slide image with fresh eyes, in this order:
+   On macOS this renders the deck through PowerPoint in a few seconds (up to a minute with large
+   videos), with exact fonts and video posters; elsewhere it uses LibreOffice. Give the command a
+   10-minute timeout (or run it in the background): with videos it can outlast a 2-minute default.
+   PowerPoint is driven through AppleScript, which a sandbox may block — if the render fails with a
+   permission or sandbox error, ask the user to approve running it outside the sandbox. PowerPoint
+   only works inside the project's render folder, `<project>/.office-render` (the deck is copied
+   there), which it has to be granted once per project. Pass the folder this session started in as
+   `--project` so the render folder never moves. Two exits need the user:
+   - **3**, not granted yet. Before running anything else, tell the user that PowerPoint will ask
+     once: in "Grant File Access" click Select…, select the `.office-render` folder itself (it is
+     hidden: ⌘⇧. shows it, or select the project folder above it), then Grant Access. This project
+     won't ask again. Then run the `--grant` command the message prints, and render again.
+   - **4**, PowerPoint is waiting on a dialog: lost access, a sign-in or update prompt, maybe on
+     another desktop. Tell the user, run that same `--grant` command, which brings the dialog
+     forward and waits for them, then render again. Never force-quit PowerPoint.
+
+   It prints one PNG per slide and an overview sheet. Look at every slide image with fresh eyes, in
+   this order:
    - text overflowing its box or the slide, or cut off at an edge
    - overlaps — text over a figure, a caption over the logos, a table over the footnote
    - crowding — elements closer than ~0.3", a slide that feels full
@@ -252,8 +322,8 @@ For a layout the spec can't express (a 2×2 comparison grid, an annotated diagra
 timeline), build everything else first, with a placeholder `content` slide where it goes — only the
 title and `"text_only": true` — so it keeps the template's background, header band and logos. Then
 open the built deck with python-pptx in a short script and add the shapes to that slide, with the
-tokens in `references/template-anatomy.md` (colors, Calibri + 等线, safe area, sizes); keep the
-title placeholder as is and only change its text. Never add a slide from a layout: the template's
+deck theme's tokens in `references/template-anatomy.md` (palette, fonts + 等线, safe area, sizes);
+keep the title placeholder as is and only change its text. Never add a slide from a layout: the template's
 background and logos live on the slides, not the layouts. Save, re-render, inspect.
 
 Rebuilding from the spec overwrites hand edits, so make them last (or keep the script and rerun it
@@ -261,6 +331,6 @@ after each rebuild), and tell the user which slides were hand-edited.
 
 ## Step 7 — Deliver
 
-Tell the user where the deck is, list the slides in one line each, and mention anything you
-assumed (date, statuses, which figure went where) so they can correct it. Point out that
+Tell the user where the deck is and which theme it uses, list the slides in one line each, and
+mention anything you assumed (date, statuses, which figure went where) so they can correct it. Point out that
 `deck_spec.json` sits next to the deck for quick edits and rebuilds.

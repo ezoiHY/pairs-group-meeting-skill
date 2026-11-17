@@ -19,10 +19,28 @@ jobs:
 
       # The Codex version needs no pptx skill, so it can build here. Calibri is missing on Linux, so
       # text fitting is estimated; only crashes, a failed file check and spec typos fail the job.
-      - name: Build the examples with the Codex version
+      - name: Build the examples with the Codex version, in every theme
         run: |
           set -o pipefail
-          for spec in examples/demo/spec.json examples/papers/spec.json; do
-            python codex/pairs-group-meeting/scripts/build_deck.py "$spec" -o "$RUNNER_TEMP/$(basename "$(dirname "$spec")").pptx" | tee -a build.log
+          for theme in classic paper; do
+            for spec in examples/demo/spec.json examples/papers/spec.json examples/layouts/spec.json; do
+              python codex/pairs-group-meeting/scripts/build_deck.py "$spec" --theme "$theme" \
+                -o "$RUNNER_TEMP/$theme-$(basename "$(dirname "$spec")").pptx" | tee -a build.log
+            done
           done
           ! grep "unknown key" build.log
+
+      - name: The template is the one tools/make_template.py makes
+        run: |
+          pip install numpy
+          python tools/make_template.py
+          python - <<'PY'
+          import re, zipfile
+          def names(path):
+              with zipfile.ZipFile(path) as zf:
+                  return sorted(re.search(r'<p:cSld\b[^>]*name="([^"]*)"', zf.read(n).decode()).group(1)
+                                for n in zf.namelist() if re.fullmatch(r"ppt/slides/slide\d+\.xml", n))
+          made = names("skills/pairs-group-meeting/assets/template.pptx")
+          print("sample slides:", made)
+          assert made == names("codex/pairs-group-meeting/assets/template.pptx"), "run tools/sync_codex.py"
+          PY

@@ -1,0 +1,45 @@
+{
+  "theme": "paper",
+  "slides": [
+    {"type": "cover", "title": "Seeing Hands Through Occlusion", "date": "2026.11.19", "name": "Your Name",
+     "extra_lines": ["PAIRS Lab, HKUST (Guangzhou)"]},
+    {"type": "agenda"},
+    {"type": "section", "title": "Vision-EMG Hand Pose", "subtitle": "Muscle signals fill in what the camera cannot see"},
+    {"type": "statement", "title": "Key result", "number": "36%",
+     "text": "Lower occluded error when EMG joins the camera",
+     "detail": "Joint-angle MAE 14.9° → 9.6°, three subjects (synthetic numbers)"},
+    {"type": "columns", "title": "What makes fusion work",
+     "subtitle": "Three choices carry most of the gain",
+     "columns": [
+       {"heading": "Per-joint weights", "text": "Each joint trusts the source that sees it best"},
+       {"heading": "Visibility gate", "text": "Camera confidence decides when EMG takes over"},
+       {"heading": "One clock", "text": "A hardware trigger keeps video and EMG within 1 ms"}]},
+    {"type": "columns", "title": "Error by condition",
+     "columns": [
+       {"heading": "Fingers hidden", "text": "Fusion keeps every joint within 10°",
+        "media": {"chart": {"type": "bar", "categories": ["Vision", "Fusion"],
+                            "series": [{"name": "MAE", "values": [14.9, 9.6]}], "highlight": ["Fusion"],
+                            "number_format": "0.0\"°\""}}},
+       {"heading": "Fast motion", "text": "EMG leads the camera by about 40 ms",
+        "media": {"chart": {"type": "bar", "categories": ["Vision", "Fusion"],
+                            "series": [{"name": "MAE", "values": [11.8, 8.9]}], "highlight": ["Fusion"],
+                            "number_format": "0.0\"°\""}}},
+       {"heading": "Clear view", "text": "Both stay close; vision alone is fine",
+        "media": {"chart": {"type": "bar", "categories": ["Vision", "Fusion"],
+                            "series": [{"name": "MAE", "values": [8.1, 7.1]}], "highlight": ["Fusion"],
+                            "number_format": "0.0\"°\""}}}]},
+    {"type": "section", "title": "Plan", "subtitle": "What is left before the paper deadline"},
+    {"type": "timeline", "title": "Road to the paper",
+     "subtitle": "Two subjects and the ablations stand between us and a draft",
+     "points": [
+       {"label": "11.05", "text": "Data from 3 subjects", "status": "done"},
+       {"label": "11.19", "text": "Fusion model beats vision", "status": "done"},
+       {"label": "12.03", "text": "Last 2 subjects recorded", "status": "now"},
+       {"label": "12.17", "text": "Ablations and figures", "status": "next"},
+       {"label": "01.07", "text": "Full paper draft", "status": "next"}]},
+    {"type": "statement", "title": "Takeaway",
+     "text": "Muscle signals fill in what the camera cannot see",
+     "detail": "A cheap armband turns occlusion from a failure into a small error"},
+    {"type": "closing", "lines": ["Questions welcome"]}
+  ]
+}

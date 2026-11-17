@@ -3,18 +3,22 @@
 
 Engines, in the order `auto` tries them:
   powerpoint   Microsoft PowerPoint on macOS, driven by AppleScript. Renders exactly what the
-               audience will see (real Calibri / DengXian, real video posters).
+               audience will see (real Calibri / DengXian, real video posters). PowerPoint works only
+               inside the project's render folder, <project>/.office-render, through office_render.py
+               (a copy of https://github.com/ezoiHY/office-render-skill). It is granted that folder once
+               per project, so decks in new folders never make it ask again.
   libreoffice  soffice, through the pptx skill's wrapper when --pptx-skill is given.
 
 Usage:
     python render.py deck.pptx [--outdir DIR] [--dpi 110] [--engine auto|powerpoint|libreoffice]
-                     [--pptx-skill DIR]
+                     [--pptx-skill DIR] [--project DIR]
 
-Prints the absolute path of every slide image and of the contact sheet.
+Prints the absolute path of every slide image and of the contact sheet. Exits 3 when PowerPoint has not
+been granted the render folder yet and 4 when it is waiting on a dialog. Both need the user (the message
+says what to run), so neither falls back to LibreOffice.
 """
 
 import argparse
-import os
 import shutil
 import subprocess
 import sys
@@ -23,74 +27,15 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-POWERPOINT_APP = Path("/Applications/Microsoft PowerPoint.app")
-# A large deck (embedded video) is not ready the moment `open` returns, so wait for it and
-# retry the export. via_powerpoint hands this a uniquely named copy, so the deck found by name is
-# always the one just copied, never a same-named deck the user has open.
-EXPORT_SCRIPT = """
-on run argv
-	set inPath to item 1 of argv
-	set outPath to item 2 of argv
-	set deckName to item 3 of argv
-	with timeout of 600 seconds
-	tell application "Microsoft PowerPoint"
-		set wasOpen to false
-		repeat with i from 1 to (count of presentations)
-			if name of presentation i is deckName then set wasOpen to true
-		end repeat
-		if not wasOpen then open (POSIX file inPath)
-		set pres to missing value
-		repeat 120 times
-			repeat with i from 1 to (count of presentations)
-				if name of presentation i is deckName then set pres to presentation i
-			end repeat
-			if pres is not missing value then exit repeat
-			delay 0.5
-		end repeat
-		if pres is missing value then error "deck did not open"
-		set didSave to false
-		set lastErr to ""
-		repeat 30 times
-			try
-				save pres in (POSIX file outPath) as save as PDF
-				set didSave to true
-				exit repeat
-			on error errMsg
-				set lastErr to errMsg
-				delay 1
-			end try
-		end repeat
-		if not wasOpen then close pres saving no
-		if not didSave then error "save as PDF failed: " & lastErr
-	end tell
-	end timeout
-end run
-"""
+import office_render
+
+POWERPOINT_APP = office_render.PP_APP
 
 
-def via_powerpoint(deck, pdf):
-    # PowerPoint tells open decks apart by file name only: if the user has an older build of this deck
-    # (or a same-named one from another folder) open, exporting by name would render that instead.
-    # The copy sits next to the deck: a folder PowerPoint may open from is not a given under its sandbox.
-    copy = deck.parent / f"{deck.stem}-render-{os.getpid()}{deck.suffix}"
-    shutil.copy2(deck, copy)
-    with tempfile.NamedTemporaryFile("w", suffix=".applescript", delete=False) as f:
-        f.write(EXPORT_SCRIPT)
-    try:
-        res = subprocess.run(["osascript", f.name, str(copy), str(pdf), copy.name],
-                             capture_output=True, text=True, timeout=660)
-    finally:
-        Path(f.name).unlink(missing_ok=True)
-        copy.unlink(missing_ok=True)
-    if res.returncode != 0 or not pdf.exists():
-        err = res.stderr.strip()
-        # -9074 (refused) and -1712 (no answer) come from a PowerPoint waiting on a dialog of its own —
-        # often macOS asking to grant it access to the folder — or stuck.
-        if "-9074" in err or "-1712" in err or "deck did not open" in err:
-            raise RuntimeError("PowerPoint would not open the deck. It is probably showing a dialog (granting "
-                               "access to the folder, sign-in, document recovery) or is stuck: check its "
-                               "window and close the dialog, or quit and reopen PowerPoint, then render again.")
-        raise RuntimeError(f"PowerPoint export failed: {err}")
+def via_powerpoint(deck, pdf, project):
+    # Copies the deck into the render folder, exports it there and moves the PDF to `pdf`. PowerPoint
+    # stays in the background, and a dialog it waits on stops the render within seconds (exit 4).
+    office_render.export_pdf(deck, pdf, project=project)
 
 
 def via_libreoffice(deck, pdf, pptx_skill):
@@ -166,15 +111,17 @@ def main():
     ap.add_argument("--dpi", type=int, default=110)
     ap.add_argument("--engine", choices=["auto", "powerpoint", "libreoffice"], default="auto")
     ap.add_argument("--pptx-skill", help="pptx skill directory, for its LibreOffice wrapper")
+    ap.add_argument("--project", help="project whose render folder PowerPoint uses (default: $CLAUDE_PROJECT_DIR, "
+                                      "else the current folder; inside a git repo, its main checkout)")
     args = ap.parse_args()
 
     deck = Path(args.deck).expanduser().resolve()
     outdir = Path(args.outdir).expanduser().resolve() if args.outdir else deck.parent / "render"
     outdir.mkdir(parents=True, exist_ok=True)
-    for stale in outdir.glob(f"{deck.stem}-slide-*.png"):
-        stale.unlink()
-    pdf = outdir / f"{deck.stem}.pdf"
-    pdf.unlink(missing_ok=True)
+    # Export beside the last render and replace it only once the new one is there, so a render that
+    # fails (PowerPoint stuck on a dialog) leaves the last good images in place.
+    fresh = outdir / f".{deck.stem}.rendering.pdf"
+    fresh.unlink(missing_ok=True)
 
     engines = [args.engine] if args.engine != "auto" else (
         ["powerpoint", "libreoffice"] if sys.platform == "darwin" and POWERPOINT_APP.exists() else ["libreoffice"])
@@ -182,15 +129,27 @@ def main():
     for engine in engines:
         try:
             if engine == "powerpoint":
-                via_powerpoint(deck, pdf)
+                via_powerpoint(deck, fresh, args.project)
             else:
-                via_libreoffice(deck, pdf, args.pptx_skill)
+                via_libreoffice(deck, fresh, args.pptx_skill)
             break
+        except office_render.Stop as e:
+            # 3: the render folder isn't granted yet; 4: PowerPoint waits on a dialog. Both need the user.
+            if e.code in (3, 4):
+                fresh.unlink(missing_ok=True)
+                print(e, file=sys.stderr)
+                sys.exit(e.code)
+            errors.append(f"{engine}: {e}")
         except (RuntimeError, subprocess.TimeoutExpired, OSError) as e:
             errors.append(f"{engine}: {e}")
     else:
+        fresh.unlink(missing_ok=True)
         sys.exit("could not render:\n  " + "\n  ".join(errors))
 
+    for stale in outdir.glob(f"{deck.stem}-slide-*.png"):
+        stale.unlink()
+    pdf = outdir / f"{deck.stem}.pdf"
+    fresh.replace(pdf)
     paths = pdf_to_pngs(pdf, outdir, deck.stem, args.dpi)
     sheet = outdir / f"{deck.stem}-overview.jpg"
     contact_sheet(paths, sheet)

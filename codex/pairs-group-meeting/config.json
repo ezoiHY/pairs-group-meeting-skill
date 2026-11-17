@@ -1,6 +1,7 @@
 {
   "presenter": "",
   "output_root": "~/Documents/PairsLab",
+  "theme": "classic",
   "done_title": "Done last two weeks",
   "todo_title": "Todo",
   "style": {

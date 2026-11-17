@@ -41,41 +41,144 @@ CONFIG = SKILL_DIR / "config.json"
 # The user's own settings (presenter, output folder) live outside the skill, so updates never touch them.
 USER_CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "pairs-group-meeting" / "config.json"
 
-# Template sample slide each spec type is cloned from.
-BASE_SLIDE = {"cover": "slide1.xml", "done": "slide2.xml", "content": "slide3.xml", "todo": "slide4.xml"}
-TEMPLATE_SLIDES = ("slide1.xml", "slide2.xml", "slide3.xml", "slide4.xml")
-
-# Geometry in EMU, measured from the template.
 EMU_PER_PT = 12700
 EMU_PER_IN = 914400
 SLIDE_W, SLIDE_H = 12192000, 6858000
-MARGIN_X = 349250                      # left edge of title and body text in the template
-CONTENT_TOP = 1219200                  # top of the template's body text box
-CONTENT_BOTTOM = 5740000               # 0.2" above the logo group, whose top is at 5922049
-LOGO_LEFT = 8128524
-FOOTNOTE_TOP, FOOTNOTE_BOTTOM = 5960000, 6400000
-TITLE_W, TITLE_MAX_W = 7620000, 11000000
-COVER_TITLE_W = 6096000
-LIST_W = 8890000                       # width of the template's Done/Todo text box
-FULL_W = SLIDE_W - 2 * MARGIN_X
 GAP = int(0.2 * EMU_PER_IN)
 COL_GAP = int(0.35 * EMU_PER_IN)
 WIDE_FIGURE = 2.6                      # width/height from which a figure is larger under the text than beside it
 
-# Colors from the template.
-NAVY = "002147"        # body text
-NAVY_DARK = "111F4A"   # cover title, table header
-SLATE = "4A5878"       # cover subtitle, captions, footnotes
-ONGOING = "980000"
-DONE_SCHEME = "accent6"
-RULE = "D5DBE6"
-STRIPE = "F2F5FA"
 
-FONTS_XML = (
-    '<a:latin typeface="Calibri" panose="020F0502020204030204" pitchFamily="34" charset="0"/>'
-    '<a:ea typeface="等线" panose="02010600030101010101" pitchFamily="2" charset="-122"/>'
-    '<a:cs typeface="Calibri" panose="020F0502020204030204" pitchFamily="34" charset="0"/>'
-)
+def _in(inches):
+    return int(round(inches * EMU_PER_IN))
+
+
+# ---------------------------------------------------------------------------
+# Themes
+#
+# Each theme is a set of sample slides in the template, named "<theme>/<kind>" (cover, content,
+# section), plus the tokens below for everything the builder writes itself. The art (backgrounds,
+# logos) lives on the sample slides; tools/make_template.py draws it to the geometry given here.
+# Every page that carries content is white: only covers and section dividers have art.
+#
+# Palette keys: bg (what the text sits on, for contrast checks), text, strong (takeaways, project
+# names, headings), muted (captions, footnotes, list letters, agenda items not being covered),
+# bullet, number (agenda numbers), accent (highlights: "ours", the best bar, the current
+# milestone), mark (the lab's gold bar and rules; decoration, never text), done / ongoing (status;
+# "scheme:accent6" is a theme color), table colors (head_fill, head_text, body_fill, stripe, rule,
+# hair; "none" = no fill), chart (series colors), chart_muted (a quiet series, e.g. "before"),
+# grid (chart gridlines and axis lines).
+
+THEMES = {
+    "classic": {
+        "about": "the lab template, for group meetings: navy header band with radar rings, white pages",
+        "fonts": {"body": "Calibri", "title": ("Calibri", True, False), "subtitle": ("Calibri", True, False),
+                  "cover": ("Calibri", True, False), "section": ("Calibri", True, False),
+                  "heading": ("Calibri", True, False), "statement": ("Calibri", True, False),
+                  "number": ("Calibri", True, False)},
+        "margin": 349250,                                   # the template's title and body left edge
+        "title": {"w": 7620000, "max_w": _in(9.70), "sizes": (36, 24)},
+        "cover_title": {"w": 6096000, "sizes": (48, 32)},
+        "section_title": {"w": _in(10.6), "sizes": (44, 30)},
+        "content": (1219200, _in(6.60)),                    # top, bottom of the content area
+        "panel_top": _in(1.09),                             # a bleeding photo starts right under the band
+        "footnote": (349250, _in(6.74), _in(7.4), _in(0.32)),  # x, y, w, h
+        "table": "rules",
+        "mark": "bar",                                      # the gold bar the lab's cover puts beside its title
+        "palette": {"bg": "FCFCFE", "text": "002147", "strong": "111F4A", "muted": "4A5878", "bullet": "2F6DB5",
+                    "number": "2F6DB5", "accent": "C9A04A", "mark": "D6B05C",
+                    "done": "scheme:accent6", "ongoing": "980000",
+                    "head_fill": "111F4A", "head_text": "FFFFFF", "body_fill": "FFFFFF", "stripe": "F2F5FA",
+                    "rule": "D5DBE6", "hair": "D5DBE6",
+                    "chart": ["111F4A", "5B8DB8", "C9A04A", "980000", "8A97B0"], "chart_muted": "A3AEC2",
+                    "grid": "D5DBE6"},
+    },
+    "paper": {
+        "about": "editorial, for formal talks: white pages, serif titles, ruled tables, the lab's rings on cover "
+                 "and sections",
+        "fonts": {"body": "Calibri", "title": ("Georgia", False, False), "subtitle": ("Georgia", False, True),
+                  "cover": ("Georgia", False, False), "section": ("Georgia", False, False),
+                  "heading": ("Georgia", False, False), "statement": ("Georgia", False, False),
+                  "number": ("Georgia", False, False)},
+        "margin": _in(0.6),
+        "title": {"w": _in(9.9), "max_w": _in(9.9), "sizes": (36, 26)},
+        "cover_title": {"w": _in(7.0), "sizes": (60, 40)},
+        "section_title": {"w": _in(8.2), "sizes": (48, 32)},
+        "content": (_in(1.42), _in(6.62)),
+        "panel_top": _in(1.42),
+        "footnote": (_in(0.6), _in(6.90), _in(7.0), _in(0.30)),
+        "table": "booktabs",
+        "mark": "rule",                                     # a short rule, as booktabs tables draw them
+        "palette": {"bg": "FFFFFF", "text": "1E2635", "strong": "111F4A", "muted": "5A6578", "bullet": "B28A2E",
+                    "number": "B28A2E", "accent": "B28A2E", "mark": "B28A2E",
+                    "done": "2E7D32", "ongoing": "A3201C",
+                    "head_fill": "none", "head_text": "111F4A", "body_fill": "none", "stripe": "none",
+                    "rule": "111F4A", "hair": "CBD2DD",
+                    "chart": ["1F2E52", "8E9BB3", "B28A2E", "A3201C", "5F6E89"], "chart_muted": "B9C2D1",
+                    "grid": "E1E5EC"},
+    },
+}
+DEFAULT_THEME = "classic"
+# Words a spec may use for a color instead of hex: they follow the slide's palette.
+COLOR_WORDS = {"primary": lambda p: p["chart"][0], "secondary": lambda p: p["chart"][1],
+               "accent": lambda p: p["accent"], "muted": lambda p: p["chart_muted"],
+               "text": lambda p: p["text"], "strong": lambda p: p["strong"]}
+
+# The current theme, its palette and its geometry (EMU), set by use_theme.
+THEME = None
+P = None
+THEME_NAME = None
+MARGIN_X = CONTENT_TOP = CONTENT_BOTTOM = FULL_W = LIST_W = 0
+FOOTNOTE_BOX = (0, 0, 0, 0)
+BODY_FONT = "Calibri"
+
+
+# Themes that were dropped, and the one a spec or config naming them gets instead.
+RETIRED_THEMES = {"midnight": "classic"}
+
+
+def use_theme(name):
+    global THEME, THEME_NAME, P, MARGIN_X, CONTENT_TOP, CONTENT_BOTTOM, FULL_W, LIST_W, FOOTNOTE_BOX, BODY_FONT
+    if name in RETIRED_THEMES:
+        warn(f"the {name} theme is gone (content pages are white in every theme now) — built in "
+             f"{RETIRED_THEMES[name]}")
+        name = RETIRED_THEMES[name]
+    if name not in THEMES:
+        near = difflib.get_close_matches(str(name), THEMES, n=1)
+        hint = f" — did you mean {near[0]!r}?" if near else ""
+        raise SystemExit(f"theme {name!r} is not one of {', '.join(THEMES)}{hint}")
+    THEME, THEME_NAME = THEMES[name], name
+    P = THEME["palette"]
+    MARGIN_X = THEME["margin"]
+    CONTENT_TOP, CONTENT_BOTTOM = THEME["content"]
+    FULL_W = SLIDE_W - 2 * MARGIN_X
+    LIST_W = min(8890000, FULL_W)        # the lab template's Done/Todo text box width
+    FOOTNOTE_BOX = THEME["footnote"]
+    BODY_FONT = THEME["fonts"]["body"]
+
+
+def resolve_color(value):
+    """A spec color — hex, or a palette word like "accent" — as hex for the current slide."""
+    if value is None:
+        return None
+    word = str(value).strip().lower()
+    return COLOR_WORDS[word](P) if word in COLOR_WORDS else str(value)
+
+
+# Latin font attributes PowerPoint writes for the fonts the themes use.
+FONT_META = {
+    "Calibri": 'panose="020F0502020204030204" pitchFamily="34" charset="0"',
+    "Georgia": 'panose="02040502050405020303" pitchFamily="18" charset="0"',
+}
+
+
+def fonts_xml(family=None):
+    """Latin and complex-script font for `family` (default: the theme's body font), DengXian for Chinese."""
+    family = family or BODY_FONT
+    meta = FONT_META.get(family, "")
+    return (f'<a:latin typeface="{escape(family)}" {meta}/>'
+            '<a:ea typeface="等线" panose="02010600030101010101" pitchFamily="2" charset="-122"/>'
+            f'<a:cs typeface="{escape(family)}" {meta}/>')
 
 DONE_WORDS = {"done", "finished", "complete", "completed", "完成", "已完成"}
 ONGOING_WORDS = {"on-going", "ongoing", "in progress", "in-progress", "wip", "进行中"}
@@ -114,21 +217,37 @@ def font_sizes(top):
 CJK = "\u1100-\u11ff\u2e80-\u9fff\uac00-\ud7af\uf900-\ufaff\ufe30-\ufe4f\uff00-\uffef"
 CJK_RE = re.compile(f"[{CJK}]")
 SEGMENT_RE = re.compile(f"[{CJK}]+|[^{CJK}]+")
-TOKEN_RE = re.compile(f"[{CJK}]|[^\\s{CJK}]+\\s*|\\s+")
+# Whitespace a line may break at: any but the no-break space that ties a number to its unit.
+BREAK = "[^\\S ]"
+TOKEN_RE = re.compile(f"[{CJK}]|(?:[^\\s{CJK}]| )+{BREAK}*|{BREAK}+")
+# "1 ms", "60 Hz", "9.6 °": the space between a number and its unit becomes a no-break space, so a line
+# never ends on the number and starts the next one with the unit.
+UNIT_GAP_RE = re.compile(r"(?<=\d) (?=(?:ns|µs|us|ms|s|min|h|Hz|kHz|MHz|GHz|nm|µm|mm|cm|m|km|mg|g|kg|mV|V|mA|"
+                         r"W|kW|dB|px|fps|FPS|KB|MB|GB|TB|K|M|B|×|%|°|°C)(?!\w))")
 
 FONT_DIRS = [
     Path("/Applications/Microsoft PowerPoint.app/Contents/Resources/DFonts"),
+    Path("/System/Library/Fonts/Supplemental"),
     Path("/Library/Fonts"),
     Path.home() / "Library" / "Fonts",
     Path("C:/Windows/Fonts"),
     Path("/usr/share/fonts/truetype/crosextra"),
 ]
+# (family, bold, italic) -> file names to look for. A missing italic falls back to the upright face.
 FONT_FILES = {
-    "latin": ("Calibri.ttf", "calibri.ttf", "Carlito-Regular.ttf"),
-    "latin_b": ("Calibrib.ttf", "calibrib.ttf", "Carlito-Bold.ttf"),
-    "cjk": ("Deng.ttf", "deng.ttf"),
-    "cjk_b": ("Dengb.ttf", "dengb.ttf", "Deng.ttf"),
+    ("Calibri", False, False): ("Calibri.ttf", "calibri.ttf", "Carlito-Regular.ttf"),
+    ("Calibri", True, False): ("Calibrib.ttf", "calibrib.ttf", "Carlito-Bold.ttf"),
+    ("Calibri", False, True): ("Calibrii.ttf", "calibrii.ttf", "Carlito-Italic.ttf"),
+    ("Georgia", False, False): ("Georgia.ttf", "georgia.ttf"),
+    ("Georgia", True, False): ("Georgia Bold.ttf", "georgiab.ttf"),
+    ("Georgia", False, True): ("Georgia Italic.ttf", "georgiai.ttf"),
+    ("DengXian", False, False): ("Deng.ttf", "deng.ttf"),
+    ("DengXian", True, False): ("Dengb.ttf", "dengb.ttf", "Deng.ttf"),
 }
+# Width of a font relative to Calibri, for estimating when it is not installed.
+FONT_WIDTH_GUESS = {"Georgia": 1.13}
+# Single line spacing as a multiple of the size, as PowerPoint renders it.
+LINE_FACTOR = {"Calibri": 1.2, "Georgia": 1.14}
 
 
 class Metrics:
@@ -136,22 +255,29 @@ class Metrics:
 
     def __init__(self):
         self.fonts = {}
-        for key, names in FONT_FILES.items():
-            for folder in FONT_DIRS:
-                hit = next((folder / n for n in names if (folder / n).exists()), None)
-                if hit:
-                    self.fonts[key] = ImageFont.truetype(str(hit), 1000)
-                    break
+        self.missing = set()
 
-    def width(self, text, size, bold=False):
+    def font(self, family, bold, italic):
+        key = (family, bold, italic)
+        if key not in self.fonts:
+            names = FONT_FILES.get(key) or FONT_FILES.get((family, bold, False)) or ()
+            hit = next((folder / n for folder in FONT_DIRS for n in names if (folder / n).exists()), None)
+            self.fonts[key] = ImageFont.truetype(str(hit), 1000) if hit else None
+            if not hit and family != "DengXian":
+                self.missing.add(family)
+        return self.fonts[key]
+
+    def width(self, text, size, bold=False, italic=False, family=None):
+        family = family or BODY_FONT
         total = 0.0
         for seg in SEGMENT_RE.findall(text):
             cjk = bool(CJK_RE.match(seg))
-            font = self.fonts.get(("cjk" if cjk else "latin") + ("_b" if bold else ""))
+            font = self.font("DengXian" if cjk else family, bold, False if cjk else italic)
             if font:
                 total += font.getlength(seg) / 1000 * size
             else:
-                total += sum(_guess_em(c, cjk) for c in seg) * size * (1.04 if bold else 1.0)
+                guess = 1.0 if cjk else FONT_WIDTH_GUESS.get(family, 1.0)
+                total += sum(_guess_em(c, cjk) for c in seg) * size * guess * (1.04 if bold else 1.0)
         return total
 
 
@@ -176,8 +302,8 @@ def line_count(runs, width_emu, size):
     lines, x = 1, 0.0
     for run in runs:
         for tok in TOKEN_RE.findall(run.text):
-            w = METRICS.width(tok, size, run.bold)
-            ink = METRICS.width(tok.rstrip(), size, run.bold)
+            w = METRICS.width(tok, size, run.bold, run.italic, run.font)
+            ink = METRICS.width(tok.rstrip(), size, run.bold, run.italic, run.font)
             if x > 0 and x + ink > limit:
                 lines += 1
                 x = 0.0
@@ -191,10 +317,44 @@ def line_count(runs, width_emu, size):
     return lines
 
 
+def last_line(runs, width_emu, size):
+    """(lines, words on the last line) for a paragraph, broken the way line_count breaks it."""
+    limit = width_emu / EMU_PER_PT * 0.97
+    lines, x, words_on_line = 1, 0.0, 0
+    for run in runs:
+        for tok in TOKEN_RE.findall(run.text):
+            w = METRICS.width(tok, size, run.bold, run.italic, run.font)
+            ink = METRICS.width(tok.rstrip(), size, run.bold, run.italic, run.font)
+            if x > 0 and x + ink > limit:
+                lines, x, words_on_line = lines + 1, 0.0, 0
+                if tok.isspace():
+                    continue
+            words_on_line += 0 if tok.isspace() else 1
+            x += w
+    return lines, words_on_line
+
+
+def widowed(paras, width_emu, size):
+    """True when a paragraph that wraps leaves a single word alone on its last line."""
+    for p in paras:
+        if p.runs:
+            lines, last = last_line(p.runs, width_emu - p.marL, size)
+            if lines > 1 and last == 1:
+                return True
+    return False
+
+
+def prefer_unwidowed(sizes, paras_by_box, width_emu):
+    """The first size in `sizes` (all of which fit) that leaves no word alone on a last line, else the first."""
+    return next((size for size in sizes if not any(widowed(ps, width_emu, size) for ps in paras_by_box)),
+                sizes[0] if sizes else None)
+
+
 def line_height(runs, size):
     # Measured in PowerPoint renders: single spacing is ~1.2x the size for Calibri and DengXian alike.
     has_cjk = any(CJK_RE.search(r.text) for r in runs)
-    return size * (1.24 if has_cjk else 1.2)
+    factor = max([LINE_FACTOR.get(r.font or BODY_FONT, 1.2) for r in runs] or [LINE_FACTOR.get(BODY_FONT, 1.2)])
+    return size * max(factor, 1.24 if has_cjk else 0)
 
 
 # ---------------------------------------------------------------------------
@@ -202,16 +362,31 @@ def line_height(runs, size):
 
 
 class Run:
-    def __init__(self, text, bold=False, color=NAVY, scheme=None, italic=False):
-        self.text, self.bold, self.color, self.scheme, self.italic = text, bold, color, scheme, italic
+    """A run of text. color None = the slide palette's text color; a "scheme:<name>" color is a theme color;
+    font None = the theme's body font."""
+
+    def __init__(self, text, bold=False, color=None, scheme=None, italic=False, font=None):
+        if color and str(color).startswith("scheme:"):
+            color, scheme = None, color[len("scheme:"):]
+        self.text, self.bold, self.scheme, self.italic, self.font = text, bold, scheme, italic, font
+        self._color = color
+
+    @property
+    def color(self):
+        return self._color or P["text"]
 
 
 class Para:
     """One <a:p>. Spacing is given as a fraction of the font size so it scales with fitting."""
 
-    def __init__(self, runs, marL=0, indent=0, before=0.0, bullet=None, algn="l", color=NAVY):
+    def __init__(self, runs, marL=0, indent=0, before=0.0, bullet=None, algn="l", color=None, bullet_color=None):
         self.runs, self.marL, self.indent = runs, marL, indent
-        self.before, self.bullet, self.algn, self.color = before, bullet, algn, color
+        self.before, self.bullet, self.algn = before, bullet, algn
+        self._color, self._bullet_color = color, bullet_color
+
+    @property
+    def color(self):
+        return self._color or P["text"]
 
     def height(self, width_emu, size):
         if not self.runs:
@@ -221,7 +396,7 @@ class Para:
 
     def xml(self, size):
         if self.bullet:
-            bu = (f'<a:buClr><a:srgbClr val="{self.color}"/></a:buClr><a:buSzPct val="100000"/>'
+            bu = (f'<a:buClr><a:srgbClr val="{self._bullet_color or P["bullet"]}"/></a:buClr><a:buSzPct val="100000"/>'
                   f'<a:buFont typeface="Arial" panose="020B0604020202020204" pitchFamily="34" charset="0"/>'
                   f'<a:buChar char="{escape(self.bullet)}"/>')
         else:
@@ -231,8 +406,9 @@ class Para:
                f'<a:spcBef><a:spcPts val="{round(self.before * size * 100)}"/></a:spcBef>'
                f'<a:spcAft><a:spcPts val="0"/></a:spcAft>{bu}</a:pPr>')
         runs = "".join(run_xml(r, size) for r in self.runs)
+        font = self.runs[-1].font if self.runs else None
         end = (f'<a:endParaRPr lang="en-US" altLang="zh-CN" sz="{round(size * 100)}" dirty="0">'
-               f'<a:solidFill><a:srgbClr val="{self.color}"/></a:solidFill>{FONTS_XML}</a:endParaRPr>')
+               f'<a:solidFill><a:srgbClr val="{self.color}"/></a:solidFill>{fonts_xml(font)}</a:endParaRPr>')
         return f'<a:p {nsdecls("a")}>{ppr}{runs}{end}</a:p>'
 
 
@@ -244,15 +420,15 @@ def run_xml(run, size):
     attrs = f'lang="en-US" altLang="zh-CN" sz="{round(size * 100)}" b="{1 if run.bold else 0}"'
     if run.italic:
         attrs += ' i="1"'
-    return f'<a:r><a:rPr {attrs} dirty="0">{fill}{FONTS_XML}</a:rPr><a:t>{escape(run.text)}</a:t></a:r>'
+    return f'<a:r><a:rPr {attrs} dirty="0">{fill}{fonts_xml(run.font)}</a:rPr><a:t>{escape(run.text)}</a:t></a:r>'
 
 
-def inline_runs(text, bold=False, color=NAVY):
-    """Split **bold** markup into runs."""
+def inline_runs(text, bold=False, color=None, italic=False, font=None):
+    """Split **bold** markup into runs (and keep each number on the line of its unit)."""
     runs = []
-    for i, part in enumerate(str(text).split("**")):
+    for i, part in enumerate(UNIT_GAP_RE.sub(" ", str(text)).split("**")):
         if part:
-            runs.append(Run(part, bold=bold or i % 2 == 1, color=color))
+            runs.append(Run(part, bold=bold or i % 2 == 1, color=color, italic=italic, font=font))
     return runs
 
 
@@ -328,32 +504,70 @@ def ensure_cjk_font(rpr):
 # Slide fillers
 
 
+def fit_one_line(text, font, width, sizes):
+    """(size, fits): the largest size from sizes[0] down to sizes[1], in 2pt steps, at which text is one line."""
+    family, bold, italic = font
+    runs = [Run(text, bold=bold, italic=italic, font=family)]
+    size = sizes[0]
+    while size > sizes[1] and line_count(runs, width, size) > 1:
+        size -= 2
+    return size, line_count(runs, width, size) == 1
+
+
 def set_title(slide, text):
     shape = slide.shapes.title
-    runs = [Run(text, bold=True)]
-    width, size = TITLE_W, 36
-    if line_count(runs, width, size) > 1:
-        width = TITLE_MAX_W
-        while size > 24 and line_count(runs, width, size) > 1:
-            size -= 2
-        if line_count(runs, width, size) > 1:
-            warn(f"title too long for one line even at 24pt: {text!r}")
+    spec = THEME["title"]
+    width = spec["w"]
+    size, ok = fit_one_line(text, THEME["fonts"]["title"], width, (spec["sizes"][0], spec["sizes"][0]))
+    if not ok:
+        width = spec["max_w"]
+        size, ok = fit_one_line(text, THEME["fonts"]["title"], width, spec["sizes"])
+        if not ok:
+            warn(f"title too long for one line even at {size}pt: {text!r}")
     shape.width = Emu(width)
     set_single_text(shape, text, size)
 
 
-def fill_cover(slide, s):
-    title = s.get("title") or "Group Meeting"
+def fill_cover(slide, s, base_dir, work):
+    lines = [s["date"], s.get("name", "")] + list(s.get("extra_lines", []))
+    fill_title_page(slide, s.get("title") or "Group Meeting", lines, s.get("image"), base_dir, work, "cover")
+
+
+def fill_closing(slide, s, base_dir, work):
+    """The last slide of a talk, on the cover's page: "Thank you" and a line or two (questions, contact)."""
+    fill_title_page(slide, s.get("title") or "Thank you", list(s.get("lines", [])), s.get("image"), base_dir, work,
+                    "closing slide")
+
+
+def fill_title_page(slide, title, lines, image, base_dir, work, what):
+    """The cover's page: its title, the lines under it (date and name, or a closing line), its photo."""
     shape = slide.shapes.title
-    size = 48
-    while size > 32 and line_count([Run(title, bold=True)], COVER_TITLE_W, size) > 1:
-        size -= 2
-    if line_count([Run(title, bold=True)], COVER_TITLE_W, size) > 1:
-        shape.width = Emu(COVER_TITLE_W + 1000000)
+    spec = THEME["cover_title"]
+    font = THEME["fonts"]["cover"]
+    size, ok = fit_one_line(title, font, spec["w"], spec["sizes"])
+    if not ok:
+        # A long talk title takes two lines rather than shrinking further. It may widen only where no photo
+        # panel sits beside it, and it grows upwards, so the lines under it stay where they are.
+        photo = bool(image) and any(sh.name == "Image slot" for sh in slide.shapes)
+        width = spec["w"] if photo else spec["w"] + 1000000
+        runs = [Run(title, bold=font[1], italic=font[2], font=font[0])]
+        size = next((sz for sz in range(spec["sizes"][0], spec["sizes"][1] - 1, -2)
+                     if line_count(runs, width, sz) <= 2), spec["sizes"][1])
+        title_lines = line_count(runs, width, size)
+        if title_lines > 2:
+            warn(f"{what} title runs past two lines even at {size}pt — shorten it: {title!r}")
+        height = int(title_lines * size * LINE_FACTOR.get(font[0], 1.2) * EMU_PER_PT + 0.1 * EMU_PER_IN)
+        if height > shape.height:
+            shape.top, shape.height = Emu(shape.top + shape.height - height), Emu(height)
+        shape.width = Emu(width)
     set_single_text(shape, title, size)
 
     sub = next(sh for sh in slide.placeholders if sh.placeholder_format.idx == 1)
-    lines = [line for line in [s["date"], s.get("name", "")] + list(s.get("extra_lines", [])) if line]
+    lines = [line for line in lines if line]
+    if not lines:
+        sub._element.getparent().remove(sub._element)
+        fill_image_slot(slide, image, base_dir, work, what)
+        return
     tx_body = sub.text_frame._txBody
     paras = tx_body.findall(qn("a:p"))
     while len(paras) < len(lines):
@@ -370,6 +584,80 @@ def fill_cover(slide, s):
         ensure_cjk_font(runs[0].find(qn("a:rPr")))
     if len(lines) > 2:
         sub.height = Emu(sub.height + (len(lines) - 2) * int(0.42 * EMU_PER_IN))
+    fill_image_slot(slide, image, base_dir, work, what)
+
+
+def fill_image_slot(slide, image, base_dir, work, what):
+    """Put `image` where the template's "Image slot" shape is, cropped to its shape; drop the slot either way."""
+    slot = next((sh for sh in slide.shapes if sh.name == "Image slot"), None)
+    if not image:
+        if slot is not None:
+            slot._element.getparent().remove(slot._element)
+        return
+    if slot is None:
+        warn(f"the {THEME_NAME} theme's {what} has no place for an image — left out (classic covers have none)")
+        return
+    item = prepare_media(image, base_dir, work)
+    if item["kind"] != "image":
+        raise SystemExit(f"{what} image: use a picture (png, jpg…), not a {item['kind']}")
+    geometry = slot._element.spPr.find(qn("a:prstGeom")).get("prst")
+    x, y, w, h = slot.left, slot.top, slot.width, slot.height
+    pic = slide.shapes.add_picture(str(item["file"]), x, y, w, h)
+    pic.name = f"{what.capitalize()} image"
+    pic._element.nvPicPr.cNvPr.set("descr", item.get("caption") or item["src"].name)
+    crop_to_fill(pic, w / h, item)
+    pic._element.spPr.find(qn("a:prstGeom")).set("prst", geometry)
+    slot._element.addprevious(pic._element)          # keep the slot's place in the stacking order
+    slot._element.getparent().remove(slot._element)
+
+
+def crop_to_fill(pic, box_aspect, item):
+    """Crop a picture or video to `box_aspect` (width/height) around the item's focus point (default: the
+    middle), so it fills its box instead of sitting in it with bars."""
+    focus = item.get("focus") or [0.5, 0.5]
+    try:
+        fx, fy = (min(1.0, max(0.0, float(v))) for v in focus[:2])
+    except (TypeError, ValueError):
+        warn(f"focus {focus!r} should be two numbers from 0 to 1 ([x, y] from the top left) — used the middle")
+        fx = fy = 0.5
+    aspect = item["aspect"]
+    if aspect > box_aspect:
+        cut = 1 - box_aspect / aspect
+        pic.crop_left, pic.crop_right = cut * fx, cut * (1 - fx)
+    elif aspect < box_aspect:
+        cut = 1 - aspect / box_aspect
+        pic.crop_top, pic.crop_bottom = cut * fy, cut * (1 - fy)
+
+
+def fill_section(slide, s):
+    """A divider between parts of the deck: the part's name, and one optional line under it."""
+    shape = slide.shapes.title
+    spec = THEME["section_title"]
+    size, ok = fit_one_line(s["title"], THEME["fonts"]["section"], spec["w"], spec["sizes"])
+    if not ok:
+        warn(f"section title too long for one line even at {size}pt: {s['title']!r} — shorten it")
+    set_single_text(shape, s["title"], size)
+    sub = next((sh for sh in slide.placeholders if sh.placeholder_format.idx == 1), None)
+    if sub is None:
+        return
+    if s.get("subtitle"):
+        set_single_text(sub, s["subtitle"], None)
+    else:
+        sub._element.getparent().remove(sub._element)
+
+
+def fill_footer(slide, label, number):
+    """The footer the theme's sample slide carries: the current part of the deck, and the slide number."""
+    for shape in list(slide.shapes):
+        if shape.name == "Footer label":
+            if label:
+                set_single_text(shape, label, None)
+            else:
+                shape._element.getparent().remove(shape._element)
+        elif shape.name == "Slide number":
+            # A slide-number field: PowerPoint keeps it right when slides move; this is its cached text.
+            for t in shape._element.iter(qn("a:t")):
+                t.text = str(number)
 
 
 def normalize_item(item):
@@ -381,10 +669,10 @@ def normalize_item(item):
 def status_run(status):
     key = status.strip().lower()
     if key in DONE_WORDS:
-        return Run("done", scheme=DONE_SCHEME)
+        return Run("done", color=P["done"])
     if key in ONGOING_WORDS:
-        return Run(status if key == "in progress" else "on-going", color=ONGOING)
-    return Run(status, color=ONGOING)
+        return Run(status if key == "in progress" else "on-going", color=P["ongoing"])
+    return Run(status, color=P["ongoing"])
 
 
 def progress_paras(projects, kind):
@@ -392,15 +680,15 @@ def progress_paras(projects, kind):
     paras = []
     for pi, proj in enumerate(projects):
         label = proj.get("label", "Project: ")
-        head = [Run(label, bold=True)] if label else []
-        head += inline_runs(proj.get("name", ""), bold=True)
+        head = [Run(label, bold=True, color=P["strong"])] if label else []
+        head += inline_runs(proj.get("name", ""), bold=True, color=P["strong"])
         paras.append(Para(head, before=0 if pi == 0 else 18 / 28))
         # A project continued from the previous slide keeps counting where it left off.
         for ii, item in enumerate(proj.get("items", []), proj.get("_first", 0)):
             item = normalize_item(item)
-            runs = [Run(f"{chr(ord('a') + ii % 26)}. ")] + inline_runs(item["text"])
+            runs = [Run(f"{chr(ord('a') + ii % 26)}. ", color=P["muted"])] + inline_runs(item["text"])
             if kind == "done" and item.get("status"):
-                runs += [Run(" — "), status_run(item["status"])]
+                runs += [Run(" — ", color=P["muted"]), status_run(item["status"])]
             paras.append(Para(runs, marL=457200, before=3 / 28))
     return paras
 
@@ -453,20 +741,19 @@ def plan_progress(s, kind):
 
 def fill_progress(slide, s, kind):
     set_title(slide, s["title"])
-    body = next(sh for sh in slide.shapes if sh.has_text_frame and not sh.is_placeholder)
-    body.name = "Done list" if kind == "done" else "Todo list"
-    body.left, body.top = Emu(MARGIN_X), Emu(CONTENT_TOP)
-    body.width, body.height = Emu(s["_width"]), Emu(CONTENT_BOTTOM - CONTENT_TOP)
+    body = add_textbox(slide, (MARGIN_X, CONTENT_TOP, s["_width"], CONTENT_BOTTOM - CONTENT_TOP),
+                       "Done list" if kind == "done" else "Todo list")
     write_paragraphs(body.text_frame._txBody, progress_paras(s["projects"], kind), s["_size"])
 
 
-def bullet_paras(items, color=NAVY):
+def bullet_paras(items, color=None):
     paras = []
     for i, item in enumerate(items):
         item = normalize_item(item)
         level = int(item.get("level", 0))
         plain = item.get("bullet") is False
-        runs = inline_runs(item["text"], bold=item.get("bold", False), color=item.get("color", color))
+        runs = inline_runs(item["text"], bold=item.get("bold", False),
+                           color=resolve_color(item.get("color")) or color)
         before = 0 if i == 0 else (0.15 if level else 0.35)
         if plain:
             paras.append(Para(runs, marL=level * 342900, before=before, color=color))
@@ -486,6 +773,351 @@ def place_text(slide, paras, box, sizes, name, what):
     shape = add_textbox(slide, (x, y, w, used + 0.1 * EMU_PER_IN), name)
     write_paragraphs(shape.text_frame._txBody, paras, size)
     return used, size
+
+
+def write_box(slide, box, paras, size, name, anchor="t"):
+    shape = add_textbox(slide, box, name, anchor)
+    write_paragraphs(shape.text_frame._txBody, paras, size)
+    return shape
+
+
+def fit_lines(paras, width, sizes, max_lines):
+    """(size, fits): the largest size at which every paragraph wraps to at most max_lines lines."""
+    for size in sizes:
+        if all(line_count(p.runs, width - p.marL, size) <= max_lines for p in paras if p.runs):
+            return size, True
+    return sizes[-1], False
+
+
+def place_subtitle(slide, s, x0, y0, width, label):
+    """The slide's takeaway under its title, as on content slides; returns where the body starts."""
+    if not s.get("subtitle"):
+        return y0
+    family, bold, italic = THEME["fonts"]["subtitle"]
+    paras = [Para(inline_runs(s["subtitle"], bold=bold, color=P["strong"], italic=italic, font=family),
+                  color=P["strong"])]
+    used, _ = place_text(slide, paras, (x0, y0, width, 1.0 * EMU_PER_IN), font_sizes(24), "Subtitle",
+                         f"{label} subtitle")
+    return y0 + used + GAP
+
+
+def place_footnote(slide, s, label):
+    if s.get("footnote"):
+        paras = [Para(inline_runs(s["footnote"], color=P["muted"]), color=P["muted"])]
+        place_text(slide, paras, FOOTNOTE_BOX, [12, 11, 10], "Footnote", f"{label} footnote")
+
+
+# ---------------------------------------------------------------------------
+# Lines, bars and dots for the page forms. They carry only the fill and outline set here: python-pptx's
+# default shape style would add the Office theme's outline and shadow.
+
+
+def bare(shape):
+    style = shape._element.find(qn("p:style"))
+    if style is not None:
+        shape._element.remove(style)
+    return shape
+
+
+def add_bar(slide, box, color, name="Mark"):
+    """A filled rectangle: the lab's gold bar, or a short rule."""
+    from pptx.dml.color import RGBColor
+    from pptx.enum.shapes import MSO_SHAPE
+    x, y, w, h = (int(round(v)) for v in box)
+    shape = bare(slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Emu(x), Emu(y), Emu(max(w, 1)), Emu(max(h, 1))))
+    shape.name = name
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = RGBColor.from_string(color)
+    shape.line.fill.background()
+    return shape
+
+
+def add_rule(slide, x1, y1, x2, y2, color, width_pt=1.0, name="Rule"):
+    """A straight hairline from (x1, y1) to (x2, y2)."""
+    from pptx.dml.color import RGBColor
+    from pptx.enum.shapes import MSO_CONNECTOR
+    from pptx.util import Pt
+    line = bare(slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, *(Emu(int(round(v))) for v in (x1, y1, x2, y2))))
+    line.name = name
+    line.line.color.rgb = RGBColor.from_string(color)
+    line.line.width = Pt(width_pt)
+    return line
+
+
+def add_dot(slide, cx, cy, d, fill, outline=None, outline_pt=1.5, name="Marker"):
+    """A circle of diameter d centered on (cx, cy)."""
+    from pptx.dml.color import RGBColor
+    from pptx.enum.shapes import MSO_SHAPE
+    from pptx.util import Pt
+    box = (Emu(int(round(v))) for v in (cx - d / 2, cy - d / 2, d, d))
+    shape = bare(slide.shapes.add_shape(MSO_SHAPE.OVAL, *box))
+    shape.name = name
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = RGBColor.from_string(fill)
+    if outline:
+        shape.line.color.rgb = RGBColor.from_string(outline)
+        shape.line.width = Pt(outline_pt)
+    else:
+        shape.line.fill.background()
+    return shape
+
+
+# ---------------------------------------------------------------------------
+# Page forms beyond the content slide: agenda, statement, columns, timeline. All are drawn on the
+# theme's white content page, from typography and hairlines rather than boxes.
+
+
+def fill_agenda(slide, s):
+    """The talk's parts, numbered, one per row between hairlines. With `current`, the part about to start
+    is set in full color and the others are muted, so the same agenda can open every part."""
+    set_title(slide, s["title"])
+    label = f"agenda '{s['title']}'"
+    x0, x1 = MARGIN_X, SLIDE_W - MARGIN_X
+    y0, y1 = place_subtitle(slide, s, x0, CONTENT_TOP, x1 - x0, label), CONTENT_BOTTOM
+    items, current = s["items"], s.get("_current")
+    hfam, hbold, hital = THEME["fonts"]["heading"]
+    nfam, nbold, nital = THEME["fonts"]["number"]
+    bar = THEME["mark"] == "bar"
+    num_x = x0 + (_in(0.3) if bar else 0)       # leave room for the gold bar beside the current part
+    num_w = _in(1.0)
+    text_x = num_x + num_w
+    text_w = x1 - text_x
+    size, ok = fit_lines([Para(inline_runs(t, bold=True, italic=hital, font=hfam)) for t in items], text_w,
+                         font_sizes(32), 1)
+    if not ok:
+        warn(f"{label}: an item runs past one line even at {size}pt — shorten it")
+    row_h = min((y1 - y0) / len(items), _in(1.0))
+    top = y0 + (y1 - y0 - row_h * len(items)) / 2
+    for i, text in enumerate(items):
+        y = top + i * row_h
+        here = current == i
+        on = current is None or here
+        color, num_color = (P["strong"], P["number"]) if on else (P["muted"], P["muted"])
+        number = Run(f"{i + 1:02d}", bold=nbold or here, italic=nital, color=num_color, font=nfam)
+        write_box(slide, (num_x, y, num_w, row_h), [Para([number], color=num_color)], size,
+                  f"Agenda number {i + 1}", "ctr")
+        runs = inline_runs(text, bold=hbold or here, italic=hital, color=color, font=hfam)
+        write_box(slide, (text_x, y, text_w, row_h), [Para(runs, color=color)], size, f"Agenda item {i + 1}", "ctr")
+        if here and bar:
+            add_bar(slide, (x0, y + row_h * 0.24, _in(0.07), row_h * 0.52), P["mark"], "Agenda mark")
+        if i:
+            add_rule(slide, x0, y, x1, y, P["hair"], 1.0, f"Agenda rule {i}")
+    if THEME["table"] == "booktabs":
+        for name, y in (("top", top), ("bottom", top + row_h * len(items))):
+            add_rule(slide, x0, y, x1, y, P["rule"], 1.5, f"Agenda rule {name}")
+
+
+def fill_statement(slide, s):
+    """One message set large: a sentence, the number it is about if there is one, a line of detail under it."""
+    set_title(slide, s["title"])
+    label = f"statement '{s['title']}'"
+    x0, x1, y0, y1 = MARGIN_X, SLIDE_W - MARGIN_X, CONTENT_TOP, CONTENT_BOTTOM
+    family, bold, italic = THEME["fonts"]["statement"]
+    bar = THEME["mark"] == "bar"
+    number = s.get("number")
+    if number:
+        nfont = THEME["fonts"]["number"]
+        num_w = _in(4.4)
+        nsize, ok = fit_one_line(number, nfont, num_w, (132, 72))
+        if not ok:
+            warn(f"{label}: the number is too wide even at {nsize}pt — keep it to a few characters")
+        text_x = x0 + num_w + _in(0.6)
+        sizes = font_sizes(36)
+    else:
+        text_x = x0 + (_in(0.45) if bar else 0)
+        sizes = font_sizes(44)
+    text_w = min(x1 - text_x, _in(10.2))
+    paras = [Para(inline_runs(s["text"], bold=bold, italic=italic, color=P["strong"], font=family), color=P["strong"])]
+    fitting = [sz for sz in sizes if fit_lines(paras, text_w, [sz], 3)[1]]
+    size = prefer_unwidowed(fitting, [paras], text_w) or sizes[-1]
+    if not fitting:
+        warn(f"{label}: the statement runs past three lines even at {size}pt — shorten it")
+    text_h = stack_height(paras, text_w, size)
+    detail = [Para(inline_runs(s["detail"], color=P["muted"]), color=P["muted"])] if s.get("detail") else []
+    dsize = fit_lines(detail, text_w, font_sizes(24), 2)[0] if detail else 0
+    detail_h = stack_height(detail, text_w, dsize) if detail else 0
+    gap = _in(0.3) if detail else 0
+    block_h = text_h + gap + detail_h
+    mid = y0 + (y1 - y0) / 2
+    top = mid - block_h / 2
+    write_box(slide, (text_x, top, text_w, text_h + _in(0.1)), paras, size, "Statement")
+    if detail:
+        write_box(slide, (text_x, top + text_h + gap, text_w, detail_h + _in(0.1)), detail, dsize, "Statement detail")
+    if number:
+        nfam, nbold, nital = nfont
+        num_h = nsize * LINE_FACTOR.get(nfam, 1.2) * EMU_PER_PT
+        run = Run(number, bold=nbold, italic=nital, color=P["strong"], font=nfam)
+        write_box(slide, (x0, mid - num_h / 2, num_w, num_h), [Para([run], color=P["strong"])], nsize,
+                  "Statement number", "ctr")
+        sep_x, span = x0 + num_w + _in(0.3), max(block_h, num_h * 0.6)
+        if bar:
+            add_bar(slide, (sep_x - _in(0.035), mid - span / 2, _in(0.07), span), P["mark"])
+        else:
+            add_rule(slide, sep_x, mid - span / 2, sep_x, mid + span / 2, P["hair"], 1.0, "Statement rule")
+    elif bar:
+        add_bar(slide, (x0, top, _in(0.07), text_h), P["mark"])
+    else:
+        add_bar(slide, (x0, top - _in(0.45), _in(1.0), _in(0.035)), P["mark"])
+    place_footnote(slide, s, label)
+
+
+def fill_columns(slide, s, base_dir, work):
+    """Two to four points side by side — a heading, a line or two, optionally a visual on top — with
+    hairlines between the columns instead of boxes around them."""
+    set_title(slide, s["title"])
+    label = f"slide '{s['title']}'"
+    x0, x1 = MARGIN_X, SLIDE_W - MARGIN_X
+    y0, y1 = place_subtitle(slide, s, x0, CONTENT_TOP, x1 - x0, label), CONTENT_BOTTOM
+    cols = s["columns"]
+    gap = _in(0.7)
+    col_w = (x1 - x0 - gap * (len(cols) - 1)) / len(cols)
+    hfam, hbold, hital = THEME["fonts"]["heading"]
+    heads = [[Para(inline_runs(c.get("heading", ""), bold=hbold, italic=hital, color=P["strong"], font=hfam),
+                   color=P["strong"])] for c in cols]
+    texts = [[Para(inline_runs(t), before=0 if k == 0 else 0.6) for k, t in enumerate(as_list(c.get("text")))]
+             for c in cols]
+    media = []
+    for c in cols:
+        item = prepare_media(c["media"], base_dir, work) if c.get("media") else None
+        if item and item.get("caption"):
+            warn(f"{label}: a column's media caption is left out — the column's heading says what it shows")
+        media.append(item)
+    text_only = not any(media)
+    hsize, ok = fit_lines([ps[0] for ps in heads], col_w, font_sizes(32 if text_only else 28), 2)
+    if not ok:
+        warn(f"{label}: a column heading runs past two lines even at {hsize}pt — shorten it")
+    head_h = max(stack_height(ps, col_w, hsize) for ps in heads)
+    mark_h = _in(0.32) if THEME["mark"] == "bar" else 0
+    avail = y1 - y0
+    media_h = min(avail * 0.5, max(col_w / m["aspect"] for m in media if m)) if any(media) else 0
+    after_media = GAP * 1.5 if media_h else 0
+    room = avail - media_h - after_media - mark_h - head_h - _in(0.16)
+    fitting = [size for size in font_sizes(28 if text_only else 24)
+               if max(stack_height(ps, col_w, size) for ps in texts) <= room]
+    tsize = prefer_unwidowed(fitting, texts, col_w)
+    if tsize is None:
+        tsize = STYLE["min_font_size"]
+        warn(f"{label}: column text overflows even at {tsize}pt — cut words")
+    text_h = max(stack_height(ps, col_w, tsize) for ps in texts)
+    block_h = media_h + after_media + mark_h + head_h + _in(0.16) + text_h
+    # Columns with visuals start under the subtitle; text-only ones sit in the middle of the space left.
+    top = y0 if media_h else y0 + max(0, (avail - block_h) / 2)
+    for i, c in enumerate(cols):
+        cx, y = x0 + i * (col_w + gap), top
+        if media_h:
+            if media[i]:
+                add_media_item(slide, media[i], contain(media[i]["aspect"], (cx, y, col_w, media_h)), i + 1)
+            y += media_h + after_media
+        if mark_h:
+            add_bar(slide, (cx, y, _in(0.6), _in(0.06)), P["mark"], f"Column mark {i + 1}")
+            y += mark_h
+        write_box(slide, (cx, y, col_w, head_h + _in(0.1)), heads[i], hsize, f"Column heading {i + 1}")
+        y += head_h + _in(0.16)
+        write_box(slide, (cx, y, col_w, text_h + _in(0.1)), texts[i], tsize, f"Column text {i + 1}")
+        if i:
+            add_rule(slide, cx - gap / 2, top, cx - gap / 2, top + block_h, P["hair"], 1.0, f"Column rule {i}")
+    place_footnote(slide, s, label)
+
+
+# Words a timeline step's status may use, and how it is drawn.
+TIMELINE_STATUS = {**{w: "done" for w in DONE_WORDS},
+                   **{w: "now" for w in ONGOING_WORDS | {"now", "current"}},
+                   **{w: "next" for w in ("next", "planned", "plan", "todo", "to do", "upcoming", "later")}}
+
+
+def fill_timeline(slide, s):
+    """Milestones or steps along one line: each one's date or name above its marker, a line or two under
+    it. Done steps are filled, the current one is gold, the ones still ahead are open circles."""
+    set_title(slide, s["title"])
+    label = f"timeline '{s['title']}'"
+    x0, x1 = MARGIN_X, SLIDE_W - MARGIN_X
+    y0, y1 = place_subtitle(slide, s, x0, CONTENT_TOP, x1 - x0, label), CONTENT_BOTTOM
+    points = s["points"]
+    statuses = [p.get("_status") for p in points]
+    step = (x1 - x0) / len(points)
+    cell_w = step - _in(0.25)
+    centers = [x0 + step * (i + 0.5) for i in range(len(points))]
+    hfam, hbold, hital = THEME["fonts"]["heading"]
+    heads = [[Para(inline_runs(p.get("label", ""), bold=hbold, italic=hital, color=P["strong"], font=hfam),
+                   algn="ctr", color=P["strong"])] for p in points]
+    texts = []
+    for p, st in zip(points, statuses):
+        color = P["muted"] if st == "next" else None
+        texts.append([Para(inline_runs(p.get("text", ""), color=color), algn="ctr", color=color)])
+    lsize, ok = fit_lines([ps[0] for ps in heads], cell_w, font_sizes(26), 2)
+    fitting = [sz for sz in font_sizes(24) if fit_lines([ps[0] for ps in texts], cell_w, [sz], 3)[1]]
+    ok2 = bool(fitting)
+    tsize = prefer_unwidowed(fitting, texts, cell_w) or STYLE["min_font_size"]
+    if not (ok and ok2):
+        warn(f"{label}: a step's {'label' if not ok else 'text'} runs long even at the smallest size — shorten it")
+    label_h = max(stack_height(ps, cell_w, lsize) for ps in heads)
+    text_h = max(stack_height(ps, cell_w, tsize) for ps in texts)
+    d, above, below = _in(0.28), _in(0.22), _in(0.28)
+    block = label_h + above + d + below + text_h
+    top = y0 + max(0, (y1 - y0 - block) / 2)
+    axis_y = top + label_h + above + d / 2
+    reached = max((i for i, st in enumerate(statuses) if st in ("done", "now")), default=0)
+    add_rule(slide, centers[0], axis_y, centers[-1], axis_y, P["hair"], 2.5, "Timeline axis")
+    if reached:
+        add_rule(slide, centers[0], axis_y, centers[reached], axis_y, P["strong"], 2.5, "Timeline progress")
+    for i, (cx, st) in enumerate(zip(centers, statuses), 1):
+        if st == "now":
+            add_dot(slide, cx, axis_y, d * 1.9, P["bg"], P["accent"], 1.5, f"Marker {i} ring")
+            add_dot(slide, cx, axis_y, d, P["accent"], name=f"Marker {i}")
+        elif st == "next":
+            add_dot(slide, cx, axis_y, d, P["bg"], P["strong"], 1.75, f"Marker {i}")
+        else:
+            add_dot(slide, cx, axis_y, d, P["strong"], name=f"Marker {i}")
+        write_box(slide, (cx - cell_w / 2, top, cell_w, label_h), heads[i - 1], lsize, f"Step label {i}", "b")
+        write_box(slide, (cx - cell_w / 2, axis_y + d / 2 + below, cell_w, text_h + _in(0.1)), texts[i - 1], tsize,
+                  f"Step text {i}")
+    place_footnote(slide, s, label)
+
+
+def fill_split(slide, s, item, layout):
+    """One photo or video filling half the slide out to its edge; the takeaway and bullets beside it."""
+    label = f"slide '{s['title']}'"
+    half = SLIDE_W // 2
+    top, bottom = THEME["panel_top"], CONTENT_BOTTOM
+    if layout == "split":
+        panel, tx0, tx1 = (half, top, SLIDE_W - half, bottom - top), MARGIN_X, half - COL_GAP
+    else:
+        panel, tx0, tx1 = (0, top, half, bottom - top), half + COL_GAP, SLIDE_W - MARGIN_X
+    # A photo is cropped to fill the half; a video keeps its whole frame (a demo's every corner may matter),
+    # as wide as the half allows and against the slide's edge. "crop" in the media item overrides either.
+    if item.get("crop", item["kind"] == "image"):
+        crop_to_fill(add_media_item(slide, item, panel, 1), panel[2] / panel[3], item)
+    else:
+        px, py, pw, ph = panel
+        if item["aspect"] >= pw / ph:
+            box = (px, py + (ph - pw / item["aspect"]) / 2, pw, pw / item["aspect"])
+        else:
+            w = ph * item["aspect"]
+            box = (SLIDE_W - w if layout == "split" else 0, py, w, ph)
+        add_media_item(slide, item, box, 1)
+    width = tx1 - tx0
+    family, bold, italic = THEME["fonts"]["subtitle"]
+    sub = [Para(inline_runs(s["subtitle"], bold=bold, color=P["strong"], italic=italic, font=family),
+                color=P["strong"])] if s.get("subtitle") else []
+    bullets = bullet_paras(s.get("bullets", []))
+    cap = [Para(inline_runs(item["caption"], color=P["muted"]), color=P["muted"])] if item.get("caption") else []
+    cap_h = stack_height(cap, width, STYLE["min_font_size"]) if cap else 0
+    room = bottom - CONTENT_TOP - (cap_h + GAP if cap else 0)
+    ssize = fit_lines(sub, width, font_sizes(28), 3)[0] if sub else 0
+    sub_h = stack_height(sub, width, ssize) if sub else 0
+    between = _in(0.32) if sub and bullets else 0
+    bsize, ok = fit_size(bullets, width, room - sub_h - between, font_sizes(26)) if bullets else (0, True)
+    if not ok:
+        warn(f"{label} bullets: text overflows its column even at {bsize}pt — cut words or split the slide")
+    bul_h = stack_height(bullets, width, bsize) if bullets else 0
+    y = CONTENT_TOP + max(0, (room - sub_h - between - bul_h) / 2)
+    if sub:
+        write_box(slide, (tx0, y, width, sub_h + _in(0.1)), sub, ssize, "Subtitle")
+        y += sub_h + between
+    if bullets:
+        write_box(slide, (tx0, y, width, bul_h + _in(0.1)), bullets, bsize, "Bullets")
+    if cap:
+        write_box(slide, (tx0, bottom - cap_h, width, cap_h + _in(0.05)), cap, STYLE["min_font_size"], "Caption 1")
 
 
 # ---------------------------------------------------------------------------
@@ -520,8 +1152,8 @@ def prepare_media(item, base_dir, work):
         doc = pymupdf.open(path)
         number = int(item.get("page", 1))
         if not 1 <= number <= len(doc):
-            warn(f"{path.name} has no page {number} (it has {len(doc)}) — used page 1")
-            number = 1
+            # Page 1 instead would put the wrong figure (often a paper's title page) on the slide.
+            raise SystemExit(f"{path.name} has no page {number} (it has {len(doc)}) — fix the page number")
         out = work / f"{path.stem}-{len(list(work.iterdir()))}.png"
         doc[number - 1].get_pixmap(dpi=220, alpha=False).save(out)
         path = out
@@ -661,27 +1293,40 @@ def media_layout(items, box, rows=None, valign="top", what="media"):
 def add_media(slide, items, box, rows=None, valign="top", what="media"):
     placed, used = media_layout(items, box, rows, valign, what)
     for k, (it, (x, y, w, h), (cell_x, cell_w), cap) in enumerate(placed, 1):
-        x, y, w, h = int(x), int(y), int(w), int(h)
-        if it["kind"] == "chart":
-            add_chart(slide, it["chart"], (x, y, w, h), f"Chart {k}")
-        elif it["kind"] == "video":
-            shape = slide.shapes.add_movie(str(it["src"]), Emu(x), Emu(y), Emu(w), Emu(h),
-                                           poster_frame_image=str(it["poster"]), mime_type=it["mime"])
-            shape.name = f"Video {k}"
-        else:
-            shape = slide.shapes.add_picture(str(it["file"]), Emu(x), Emu(y), Emu(w), Emu(h))
-            shape.name = f"Figure {k}"
-        if it["kind"] != "chart":
-            shape._element.xpath("./*[1]/p:cNvPr")[0].set("descr", it.get("caption") or it["src"].name)
+        add_media_item(slide, it, (x, y, w, h), k)
         if it.get("caption"):
             tb = add_textbox(slide, (cell_x - GAP / 2, y + h + 0.04 * EMU_PER_IN, cell_w + GAP, cap), f"Caption {k}")
-            write_paragraphs(tb.text_frame._txBody, [Para(inline_runs(it["caption"], color=SLATE), algn="ctr",
-                                                          color=SLATE)], STYLE["min_font_size"])
+            write_paragraphs(tb.text_frame._txBody, [Para(inline_runs(it["caption"], color=P["muted"]), algn="ctr",
+                                                          color=P["muted"])], STYLE["min_font_size"])
     return used
 
 
-CHART_COLORS = [NAVY_DARK, "5B8DB8", "C9A04A", ONGOING, "8A97B0"]
-HIGHLIGHT = "C9A04A"   # the gold of the template's header rule
+def add_media_item(slide, it, box, k):
+    """One media item filling `box`: a native chart, an embedded video or a picture. Returns the video or
+    picture shape (None for a chart)."""
+    x, y, w, h = (int(v) for v in box)
+    if it["kind"] == "chart":
+        add_chart(slide, it["chart"], (x, y, w, h), f"Chart {k}")
+        return None
+    if it["kind"] == "video":
+        shape = slide.shapes.add_movie(str(it["src"]), Emu(x), Emu(y), Emu(w), Emu(h),
+                                       poster_frame_image=str(it["poster"]), mime_type=it["mime"])
+        shape.name = f"Video {k}"
+    else:
+        shape = slide.shapes.add_picture(str(it["file"]), Emu(x), Emu(y), Emu(w), Emu(h))
+        shape.name = f"Figure {k}"
+    shape._element.xpath("./*[1]/p:cNvPr")[0].set("descr", it.get("caption") or it["src"].name)
+    return shape
+
+
+def contain(aspect, box):
+    """The largest (x, y, w, h) of this aspect inside box, centered in it."""
+    x, y, w, h = box
+    if aspect >= w / h:
+        fw, fh = w, w / aspect
+    else:
+        fw, fh = h * aspect, h
+    return x + (w - fw) / 2, y + (h - fh) / 2, fw, fh
 
 
 def add_chart(slide, spec, box, name):
@@ -707,8 +1352,8 @@ def add_chart(slide, spec, box, name):
     chart = frame.chart
     size = Pt(STYLE["min_font_size"])
     chart.font.size = size
-    chart.font.name = "Calibri"
-    chart.font.color.rgb = RGBColor.from_string(NAVY)
+    chart.font.name = BODY_FONT
+    chart.font.color.rgb = RGBColor.from_string(P["text"])
     chart.has_title = False
     multi = len(spec["series"]) > 1
     chart.has_legend = multi
@@ -721,8 +1366,13 @@ def add_chart(slide, spec, box, name):
         plot.gap_width = 70
         plot.overlap = -10 if multi else 0
     highlight = {str(c) for c in spec.get("highlight", [])}
+    palette = P["chart"]
+    free = 0                        # series without a color of their own take the palette in order
     for i, series in enumerate(plot.series):
-        color = RGBColor.from_string(spec["series"][i].get("color", CHART_COLORS[i % len(CHART_COLORS)]))
+        given = resolve_color(spec["series"][i].get("color"))
+        if not given:
+            given, free = palette[free % len(palette)], free + 1
+        color = RGBColor.from_string(given)
         if kind == "line":
             series.smooth = False
             series.format.line.color.rgb = color
@@ -739,7 +1389,7 @@ def add_chart(slide, spec, box, name):
                     if cat.label in highlight:
                         point = series.points[j].format.fill
                         point.solid()
-                        point.fore_color.rgb = RGBColor.from_string(HIGHLIGHT)
+                        point.fore_color.rgb = RGBColor.from_string(P["accent"])
 
     labels = spec.get("labels", kind != "line")
     value_axis = chart.value_axis
@@ -748,15 +1398,17 @@ def add_chart(slide, spec, box, name):
         dl = plot.data_labels
         dl.font.size = size
         dl.font.bold = True
-        dl.font.color.rgb = RGBColor.from_string(NAVY)
+        dl.font.color.rgb = RGBColor.from_string(P["text"])
         dl.number_format = number_format
         dl.number_format_is_linked = False
         dl.position = XL_LABEL_POSITION.ABOVE if kind == "line" else XL_LABEL_POSITION.OUTSIDE_END
+        # A narrow chart would otherwise wrap a label like "14.9°" after the number.
+        dl._element.find(qn("c:txPr")).find(qn("a:bodyPr")).set("wrap", "none")
         value_axis.visible = False          # the labels carry the numbers
         value_axis.has_major_gridlines = False
     else:
         value_axis.has_major_gridlines = True
-        value_axis.major_gridlines.format.line.color.rgb = RGBColor.from_string(RULE)
+        value_axis.major_gridlines.format.line.color.rgb = RGBColor.from_string(P["grid"])
         value_axis.format.line.fill.background()
         value_axis.tick_labels.font.size = size
     for key, attr in (("y_min", "minimum_scale"), ("y_max", "maximum_scale")):
@@ -764,8 +1416,11 @@ def add_chart(slide, spec, box, name):
             setattr(value_axis, attr, float(spec[key]))
     category_axis = chart.category_axis
     category_axis.tick_labels.font.size = size
-    category_axis.format.line.color.rgb = RGBColor.from_string(RULE)
+    category_axis.format.line.color.rgb = RGBColor.from_string(P["grid"])
     category_axis.has_major_gridlines = False
+    if kind == "hbar":
+        # PowerPoint draws horizontal bars bottom-up; reversed, the first category is at the top, as written.
+        category_axis.reverse_order = True
 
 
 # ---------------------------------------------------------------------------
@@ -873,20 +1528,42 @@ def add_table(slide, plan, x, y):
         table.columns[j].width = Emu(w)
     for i, h in enumerate(heights):
         table.rows[i].height = Emu(h)
+    style = THEME["table"]
+    last = len(grid) - 1
     for i, r in enumerate(grid):
         is_head = plan["header"] and i == 0
         body_i = i - 1 if plan["header"] else i
+        if style == "booktabs":
+            # Rules only: a heavy rule above the table and below it, a light one under the header.
+            top = (19050, P["rule"]) if i == 0 else (9525, P["rule"]) if plan["header"] and i == 1 else None
+            bottom = (19050, P["rule"]) if i == last else (9525, P["rule"]) if is_head else None
+        else:
+            # A filled header, then horizontal hairlines between rows; no vertical lines.
+            top = None if is_head or (plan["header"] and i == 1) else (6350, P["hair"])
+            bottom = None if is_head else (6350, P["hair"])
         for j, c in enumerate(r):
             cell = table.cell(i, j)
             algn = plan["align"][j] or ("ctr" if is_head or j > 0 else "l")
-            color = "FFFFFF" if is_head else (c["color"] or NAVY)
+            color = P["head_text"] if is_head else (resolve_color(c["color"]) or P["text"])
             runs = inline_runs(c["text"], bold=is_head or c["bold"], color=color)
             write_paragraphs(cell.text_frame._txBody, [Para(runs, algn=algn, color=color)], plan["size"])
-            fill = c["fill"] or (NAVY_DARK if is_head else ("FFFFFF" if body_i % 2 == 0 else STRIPE))
-            style_cell(cell, fill)
+            stripe = P["stripe"] if body_i % 2 else P["body_fill"]
+            fill = resolve_color(c["fill"]) or (P["head_fill"] if is_head else stripe)
+            style_cell(cell, fill, top, bottom)
 
 
-def style_cell(cell, fill):
+def line_xml(tag, line):
+    """A cell border: (width EMU, hex color), or None for no line."""
+    if not line:
+        return f'<a:{tag} {nsdecls("a")} w="0"><a:noFill/></a:{tag}>'
+    w, color = line
+    return (f'<a:{tag} {nsdecls("a")} w="{w}" cap="flat" cmpd="sng" algn="ctr">'
+            f'<a:solidFill><a:srgbClr val="{color}"/></a:solidFill><a:prstDash val="solid"/>'
+            f'<a:round/><a:headEnd type="none" w="med" len="med"/><a:tailEnd type="none" w="med" len="med"/>'
+            f'</a:{tag}>')
+
+
+def style_cell(cell, fill, top=None, bottom=None):
     tc_pr = cell._tc.get_or_add_tcPr()
     for child in list(tc_pr):
         tc_pr.remove(child)
@@ -895,13 +1572,12 @@ def style_cell(cell, fill):
     tc_pr.set("marT", str(CELL_PAD_Y))
     tc_pr.set("marB", str(CELL_PAD_Y))
     tc_pr.set("anchor", "ctr")
-    for tag in ("lnL", "lnR", "lnT", "lnB"):
-        tc_pr.append(parse_xml(
-            f'<a:{tag} {nsdecls("a")} w="6350" cap="flat" cmpd="sng" algn="ctr">'
-            f'<a:solidFill><a:srgbClr val="{RULE}"/></a:solidFill><a:prstDash val="solid"/>'
-            f'<a:round/><a:headEnd type="none" w="med" len="med"/><a:tailEnd type="none" w="med" len="med"/>'
-            f'</a:{tag}>'))
-    tc_pr.append(parse_xml(f'<a:solidFill {nsdecls("a")}><a:srgbClr val="{fill}"/></a:solidFill>'))
+    for tag, line in (("lnL", None), ("lnR", None), ("lnT", top), ("lnB", bottom)):
+        tc_pr.append(parse_xml(line_xml(tag, line)))
+    if fill and fill != "none":
+        tc_pr.append(parse_xml(f'<a:solidFill {nsdecls("a")}><a:srgbClr val="{fill}"/></a:solidFill>'))
+    else:
+        tc_pr.append(parse_xml(f'<a:noFill {nsdecls("a")}/>'))
 
 
 # ---------------------------------------------------------------------------
@@ -913,19 +1589,26 @@ def fill_content(slide, s, base_dir, work):
     x0, x1 = MARGIN_X, SLIDE_W - MARGIN_X
     y0, y1 = CONTENT_TOP, CONTENT_BOTTOM
     label = f"slide '{s['title']}'"
-
-    if s.get("subtitle"):
-        paras = [Para(inline_runs(s["subtitle"], bold=True, color=NAVY_DARK), color=NAVY_DARK)]
-        used, _ = place_text(slide, paras, (x0, y0, x1 - x0, 1.0 * EMU_PER_IN), font_sizes(24), "Subtitle",
-                             f"{label} subtitle")
-        y0 += used + GAP
-    bullets = bullet_paras(s.get("bullets", []))
     media = [prepare_media(m, base_dir, work) for m in s.get("media", [])]
     table = s.get("table")
     if table and not table.get("rows"):
         warn(f"{label}: table has no rows — left out")
         table = None
     layout = s.get("layout", "auto")
+
+    if layout in ("split", "split-left"):
+        shown = [m for m in media if m["kind"] != "chart"]
+        if shown and not table:
+            if len(media) > 1:
+                warn(f"{label}: the {layout} layout shows one photo or video — used the first, left out the rest")
+            fill_split(slide, s, shown[0], layout)
+            place_footnote(slide, s, label)
+            return
+        warn(f"{label}: the {layout} layout needs a photo or video and no table — used the default layout")
+        layout = "auto"
+
+    y0 = place_subtitle(slide, s, x0, y0, x1 - x0, label)
+    bullets = bullet_paras(s.get("bullets", []))
     if layout == "fit":
         # Figure-led slide: a wide figure gets the full width under the text, a squarer one sits beside it.
         layout = "stack" if media and all(m["aspect"] >= WIDE_FIGURE for m in media) else "auto"
@@ -971,10 +1654,7 @@ def fill_content(slide, s, base_dir, work):
     if s.get("valign") == "middle":
         center_vertically([sh for sh in slide.shapes if sh.shape_id != slide.shapes.title.shape_id])
 
-    if s.get("footnote"):
-        paras = [Para(inline_runs(s["footnote"], color=SLATE), color=SLATE)]
-        place_text(slide, paras, (MARGIN_X, FOOTNOTE_TOP, LOGO_LEFT - MARGIN_X - GAP, FOOTNOTE_BOTTOM - FOOTNOTE_TOP),
-                   [12, 11, 10], "Footnote", f"{label} footnote")
+    place_footnote(slide, s, label)
 
 
 def center_vertically(shapes):
@@ -1023,6 +1703,13 @@ def parse_date(date):
 
 def slide_texts(s):
     texts = [s.get("title"), s.get("subtitle"), s.get("name"), s.get("footnote")] + list(s.get("extra_lines", []))
+    texts += [s.get("text"), s.get("detail"), s.get("number")] + list(s.get("lines", []))
+    if s.get("type") == "agenda":
+        texts += [str(t) for t in s.get("items", [])]
+    for col in s.get("columns", []):
+        texts += [col.get("heading")] + [str(t) for t in as_list(col.get("text"))]
+    for point in s.get("points", []):
+        texts += [point.get("label"), point.get("text")]
     texts += [normalize_item(b)["text"] for b in s.get("bullets", [])]
     for proj in s.get("projects", []):
         texts.append(proj.get("name"))
@@ -1053,12 +1740,21 @@ def words(text):
 # Keys each spec object may have. Anything else is most likely a typo, which would otherwise be
 # ignored without a word.
 SPEC_KEYS = {
-    "spec": {"slides", "output", "cover"},
-    "cover": {"type", "title", "date", "name", "extra_lines", "notes"},
+    "spec": {"slides", "output", "cover", "theme"},
+    "cover": {"type", "title", "date", "name", "extra_lines", "image", "notes"},
+    "closing": {"type", "title", "lines", "image", "notes"},
+    "image": {"path", "focus"},
+    "section": {"type", "title", "subtitle", "notes"},
+    "agenda": {"type", "title", "subtitle", "items", "current", "notes"},
     "done": {"type", "title", "projects", "notes"},
     "todo": {"type", "title", "projects", "notes"},
     "content": {"type", "title", "subtitle", "bullets", "table", "media", "media_rows", "layout", "text_width",
                 "footnote", "text_only", "valign", "notes"},
+    "statement": {"type", "title", "text", "number", "detail", "footnote", "notes"},
+    "columns": {"type", "title", "subtitle", "columns", "footnote", "notes"},
+    "column": {"heading", "text", "media"},
+    "timeline": {"type", "title", "subtitle", "points", "footnote", "notes"},
+    "point": {"label", "text", "status"},
     "paper": {"type", "title", "name", "full_title", "venue", "pipeline", "pipeline_page", "pipeline_caption", "problem",
               "approach", "novelty", "limitations", "takeaway", "notes", "layout", "text_width"},
     "compare": {"type", "theme", "title", "methods", "results", "notes"},
@@ -1069,16 +1765,21 @@ SPEC_KEYS = {
     "methods": {"header", "rows", "col_widths", "align", "font_size", "takeaway"},
     "results": {"header", "rows", "col_widths", "align", "font_size", "takeaway", "note", "better"},
     "cell": {"text", "bold", "color", "fill"},
-    "media": {"path", "caption", "poster", "page", "chart", "aspect"},
+    "media": {"path", "caption", "poster", "page", "chart", "aspect", "focus", "crop"},
     "chart": {"type", "categories", "series", "number_format", "labels", "highlight", "y_min", "y_max"},
     "series": {"name", "values", "color"},
 }
-SPEC_VALUES = {"layout": {"auto", "text-left", "text-right", "stack", "fit"}, "valign": {"top", "middle"}}
-LIST_KEYS = {"bullets", "media", "extra_lines", "projects", "items", "highlight", "categories", "header"}
+SLIDE_TYPES = ("cover", "agenda", "section", "done", "todo", "content", "statement", "columns", "timeline",
+               "paper", "compare", "closing")
+SPEC_VALUES = {"layout": {"auto", "text-left", "text-right", "stack", "fit", "split", "split-left"},
+               "valign": {"top", "middle"}}
+LIST_KEYS = {"bullets", "media", "extra_lines", "projects", "items", "highlight", "categories", "header", "lines",
+             "columns", "points"}
 # Keys that hold one line of text: a number there is used as text (a year as a series name), a list is
 # joined into one line.
 TEXT_KEYS = {"title", "subtitle", "name", "label", "text", "status", "caption", "footnote", "date", "theme",
-             "takeaway", "note", "full_title", "venue", "problem", "approach", "pipeline_caption"}
+             "takeaway", "note", "full_title", "venue", "problem", "approach", "pipeline_caption", "heading",
+             "detail", "number"}
 HEX_RE = re.compile(r"[0-9A-Fa-f]{6}")
 
 
@@ -1098,7 +1799,7 @@ def check_keys(obj, kind, where):
             obj[key] = [value]
         elif key in TEXT_KEYS and isinstance(value, (int, float)) and not isinstance(value, bool):
             obj[key] = str(value)
-        elif key in TEXT_KEYS and isinstance(value, list):
+        elif key in TEXT_KEYS and isinstance(value, list) and not (kind == "column" and key == "text"):
             warn(f"{where}: {key} should be one line of text — joined the list into one")
             obj[key] = " ".join(map(str, value))
         elif key in SPEC_VALUES and (not isinstance(value, str) or value not in SPEC_VALUES[key]):
@@ -1108,8 +1809,11 @@ def check_keys(obj, kind, where):
             hexa = str(value).strip().lstrip("#")
             if HEX_RE.fullmatch(hexa):
                 obj[key] = hexa.upper()
+            elif hexa.lower() in COLOR_WORDS:
+                obj[key] = hexa.lower()
             else:
-                warn(f"{where}: {key} {value!r} is not a color like \"980000\" — used the default")
+                warn(f"{where}: {key} {value!r} is not a color like \"980000\" or one of "
+                     f"{', '.join(COLOR_WORDS)} — used the default")
                 del obj[key]
 
 
@@ -1131,13 +1835,28 @@ def check_spec(spec):
             spec["slides"].insert(0, {"type": "cover", **cover})
     for i, s in enumerate(spec.get("slides", []), 1):
         kind = s.get("type", "content") if isinstance(s, dict) else None
-        if kind not in ("cover", "done", "todo", "content", "paper", "compare"):
+        if kind not in SLIDE_TYPES:
             continue
         where = f"slide {i} ({s.get('title') or s.get('theme') or kind})"
+        if "tone" in s:
+            warn(f"{where}: \"tone\" is gone — every content page is white now; ignored")
+            del s["tone"]
         check_keys(s, kind, where)
         if kind == "paper" and isinstance(s.get("pipeline"), dict):
             check_keys(s["pipeline"], "media", f"{where} pipeline")
             need(s["pipeline"], ("path",), f"{where}: \"pipeline\" needs a \"path\"")
+        if kind in ("cover", "closing") and isinstance(s.get("image"), dict):
+            check_keys(s["image"], "image", f"{where} image")
+            need(s["image"], ("path",), f"{where}: \"image\" needs a \"path\"")
+        for col in s.get("columns", []) if kind == "columns" else []:
+            check_keys(col, "column", where)
+            need(col, ("heading", "text"), f"{where}: every column needs a \"heading\" or a \"text\"")
+            if isinstance(col, dict) and isinstance(col.get("media"), (dict, str)):
+                check_keys(col["media"], "media", f"{where} column media")
+                need(col["media"], ("path", "chart"), f"{where}: a column's media needs a \"path\" (or a \"chart\")")
+        for point in s.get("points", []) if kind == "timeline" else []:
+            check_keys(point, "point", where)
+            need(point, ("label", "text"), f"{where}: every point needs a \"label\" or a \"text\"")
         for proj in s.get("projects", []):
             check_keys(proj, "project", where)
             for item in proj.get("items", []) if isinstance(proj, dict) else []:
@@ -1190,6 +1909,30 @@ def lint(s):
             warn(f"{where}: bullet over {limit} words — {long!r}")
         if not s.get("media") and not s.get("text_only"):
             warn(f"{where}: no figure, demo video or chart — add a visual (or set \"text_only\": true)")
+    if s["type"] == "section" and s.get("subtitle") and words(s["subtitle"]) > limit:
+        warn(f"{where}: section subtitle over {limit} words — one short line on what this part covers")
+    if s["type"] == "statement":
+        if words(s["text"]) > limit:
+            warn(f"{where}: statement over {limit} words — one sentence people remember")
+        if s.get("detail") and words(s["detail"]) > limit:
+            warn(f"{where}: detail over {limit} words — one supporting line")
+    if s["type"] == "columns":
+        for col in s["columns"]:
+            lines = as_list(col.get("text"))
+            if len(lines) > 2:
+                warn(f"{where}: a column has {len(lines)} lines — keep it to a heading and two lines")
+            long = next((t for t in lines if words(str(t)) > limit), None)
+            if long:
+                warn(f"{where}: column line over {limit} words — {long!r}")
+            if col.get("heading") and words(col["heading"]) > 6:
+                warn(f"{where}: column heading over 6 words — {col['heading']!r}")
+    if s["type"] == "timeline":
+        item_limit = STYLE["max_words_per_item"]
+        long = next((p["text"] for p in s["points"] if p.get("text") and words(p["text"]) > item_limit), None)
+        if long:
+            warn(f"{where}: step text over {item_limit} words — {long!r}")
+    if s["type"] == "agenda" and len(s["items"]) > 6:
+        warn(f"{where}: {len(s['items'])} parts — an agenda reads best with six or fewer")
     for proj in s.get("projects", []):
         item_limit = STYLE["max_words_per_item"]
         long = next((normalize_item(i)["text"] for i in proj.get("items", [])
@@ -1247,11 +1990,8 @@ def paper_slides(s):
         long = next((t for _, items in columns for t in items if words(t) > STYLE["max_words_per_bullet"]), None)
         if long:
             warn(f"{where}: point over {STYLE['max_words_per_bullet']} words — {long!r}")
-        count = max(len(items) for _, items in columns)
-        rows = [[items[i] if i < len(items) else "" for _, items in columns] for i in range(count)]
-        second = {"type": "content", "title": f"{name}: novelty and limits", "text_only": True, "valign": "middle",
-                  "table": {"header": [head for head, _ in columns], "rows": rows,
-                            "col_widths": [1] * len(columns), "align": ["left"] * len(columns)}}
+        second = {"type": "columns", "title": f"{name}: novelty and limits",
+                  "columns": [{"heading": head, "text": [str(t) for t in items]} for head, items in columns]}
         if s.get("takeaway"):
             second["subtitle"] = s["takeaway"]
         if len(notes) > 1:
@@ -1260,9 +2000,12 @@ def paper_slides(s):
     return out
 
 
-# A number as results tables write it: −3.2 (Unicode minus), .85, 1,234, and an optional K/M/B/G/T unit.
-# A minus right after a letter or digit is a hyphen (ResNet-50), not a sign.
-NUMBER_RE = re.compile(r"((?<!\w)[-−])?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)\s?([KkMBGT](?![A-Za-z]))?")
+# A number as results tables write it: −3.2 (Unicode minus), .85, 1,234, scientific notation (1.2e-3,
+# 3.4×10^5), and an optional K/M/B/G/T unit. A minus right after a letter or digit is a hyphen
+# (ResNet-50), not a sign.
+NUMBER_RE = re.compile(r"((?<!\w)[-−])?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)"
+                       r"(?:[eE]([-+−]?\d+)|\s?[×x]\s?10\^?([-+−]?\d+))?"
+                       r"\s?([KkMBGT](?![A-Za-z]))?")
 UNITS = {"K": 1e3, "k": 1e3, "M": 1e6, "B": 1e9, "G": 1e9, "T": 1e12}
 
 
@@ -1271,8 +2014,9 @@ def cell_number(text):
     hit = NUMBER_RE.search(text)
     if not hit:
         return None
-    sign, digits, unit = hit.groups()
-    value = float(digits.replace(",", "")) * UNITS.get(unit or "", 1)
+    sign, digits, exp_e, exp_x, unit = hit.groups()
+    exponent = int((exp_e or exp_x or "0").replace("−", "-"))
+    value = float(digits.replace(",", "")) * 10.0 ** exponent * UNITS.get(unit or "", 1)
     return -value if sign else value
 
 
@@ -1353,13 +2097,46 @@ def expand_slides(spec, cfg):
         slides.extend(paper_slides(s) if kind == "paper" else compare_slides(s) if kind == "compare" else [dict(s)])
     if not any(s.get("type") == "cover" for s in slides) and spec.get("cover", True) is not False:
         slides.insert(0, {"type": "cover"})
+    sections = [str(s["title"]) for s in slides if s.get("type") == "section" and s.get("title")]
     planned = []
     for s in slides:
         kind = s.get("type", "content")
-        if kind not in BASE_SLIDE:
-            raise SystemExit(f"unknown slide type {kind!r}; use cover, done, content, paper, compare or todo")
+        if kind not in SLIDE_TYPES:
+            raise SystemExit(f"unknown slide type {kind!r}; use {', '.join(SLIDE_TYPES)}")
         s["type"] = kind
-        if kind == "cover":
+        if kind == "closing":
+            s.setdefault("title", "Thank you")
+            lint(s)
+            planned.append(s)
+            continue
+        if kind == "agenda":
+            s.setdefault("title", "Outline")
+            items = [str(t.get("title") or t.get("text") or "") if isinstance(t, dict) else str(t)
+                     for t in as_list(s.get("items"))] or sections
+            if not items:
+                warn(f"agenda '{s['title']}' has no \"items\" and the deck has no section slides to list — left out")
+                continue
+            s["items"] = items
+            current = s.get("current")
+            if current is not None:
+                if isinstance(current, int) and not isinstance(current, bool):
+                    index = current - 1 if 1 <= current <= len(items) else None
+                else:
+                    key = str(current).strip().lower()
+                    index = next((k for k, t in enumerate(items) if t.strip().lower() == key), None)
+                if index is None:
+                    warn(f"agenda '{s['title']}': current {current!r} is neither an item's number (1–{len(items)}) "
+                         "nor one of its titles — nothing is highlighted")
+                s["_current"] = index
+            lint(s)
+            planned.append(s)
+            continue
+        if kind == "section":
+            if not s.get("title"):
+                raise SystemExit("every section slide needs a title (the name of the part it opens)")
+            lint(s)
+            planned.append(s)
+        elif kind == "cover":
             day = parse_date(s["date"]) if s.get("date") else datetime.date.today()
             if day:
                 s["date"] = day.strftime("%Y.%m.%d")
@@ -1380,10 +2157,112 @@ def expand_slides(spec, cfg):
             planned.extend(plan_progress(s, kind))
         else:
             if not s.get("title"):
-                raise SystemExit("every content slide needs a title")
+                raise SystemExit(f"every {kind} slide needs a title")
+            if kind == "statement" and not s.get("text"):
+                raise SystemExit(f"statement '{s['title']}' needs a \"text\": the sentence it shows")
+            if kind == "columns":
+                cols = [c if isinstance(c, dict) else {"text": c} for c in as_list(s.get("columns"))]
+                if len(cols) < 2:
+                    raise SystemExit(f"columns '{s['title']}' needs 2 to 4 \"columns\"")
+                if len(cols) > 4:
+                    warn(f"columns '{s['title']}': {len(cols)} columns — kept the first 4; put the rest on another slide")
+                    cols = cols[:4]
+                s["columns"] = cols
+            if kind == "timeline":
+                points = [p if isinstance(p, dict) else {"label": str(p)} for p in as_list(s.get("points"))]
+                if len(points) < 2:
+                    raise SystemExit(f"timeline '{s['title']}' needs at least 2 \"points\"")
+                if len(points) > 6:
+                    warn(f"timeline '{s['title']}': {len(points)} points — kept the first 6; split the plan")
+                    points = points[:6]
+                for p in points:
+                    status = str(p.get("status") or "").strip().lower()
+                    p["_status"] = TIMELINE_STATUS.get(status)
+                    if status and not p["_status"]:
+                        warn(f"timeline '{s['title']}': status {p['status']!r} is not done, now or next — drawn as "
+                             "a plain step")
+                s["points"] = points
             lint(s)
             planned.append(s)
     return planned
+
+
+def template_samples():
+    """{"<theme>/<kind>": slide file name} for the template's sample slides, read from the file itself
+    (python-pptx renumbers slide parts when it opens a deck, so its names can differ from the file's)."""
+    import zipfile
+    with zipfile.ZipFile(TEMPLATE) as zf:
+        pres = zf.read("ppt/presentation.xml").decode("utf-8")
+        rels = zf.read("ppt/_rels/presentation.xml.rels").decode("utf-8")
+        targets = {re.search(r'Id="([^"]+)"', r).group(1): re.search(r'Target="([^"]+)"', r).group(1)
+                   for r in re.findall(r"<Relationship\b[^>]*>", rels)}
+        samples = {}
+        for rid in re.findall(r'<p:sldId\b[^>]*r:id="([^"]+)"', pres):
+            name = targets[rid].rsplit("/", 1)[-1]
+            head = zf.read(f"ppt/slides/{name}").decode("utf-8")[:4000]
+            hit = re.search(r'<p:cSld\b[^>]*\bname="([^"]*)"', head)
+            if hit and hit.group(1):
+                samples[hit.group(1)] = name
+    return samples
+
+
+def sample_of(s):
+    """The template slide a spec slide is cloned from: the cover's page for the cover and the closing slide,
+    the divider for sections, the white content page for everything else."""
+    kind = s["type"]
+    if kind in ("cover", "closing"):
+        return f"{THEME_NAME}/cover"
+    if kind == "section":
+        return f"{THEME_NAME}/section"
+    return f"{THEME_NAME}/content"
+
+
+def luminance(hex_color):
+    def channel(v):
+        v /= 255
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+
+def contrast(a, b):
+    la, lb = sorted((luminance(a), luminance(b)), reverse=True)
+    return (la + 0.05) / (lb + 0.05)
+
+
+def check_colors(s):
+    """Warn about colors a spec fixes that would barely show on this theme's background."""
+    where = f"slide '{s.get('title')}'"
+    bg = P["bg"]
+    for m in s.get("media", []):
+        for ser in ((m.get("chart") or {}).get("series", []) if isinstance(m, dict) else []):
+            color = resolve_color(ser.get("color"))
+            if color and HEX_RE.fullmatch(color) and contrast(color, bg) < 1.5:
+                warn(f"{where}: series {ser.get('name')!r} color {color} barely shows on the {THEME_NAME} theme's "
+                     "white page — drop \"color\" to use the theme's palette, or use \"muted\" / \"accent\"")
+    texts = [b for b in s.get("bullets", []) if isinstance(b, dict)]
+    table = s.get("table") or {}
+    texts += [c for row in [table.get("header", [])] + list(table.get("rows", [])) for c in row if isinstance(c, dict)]
+    for item in texts:
+        color = resolve_color(item.get("color"))
+        back = resolve_color(item.get("fill")) or bg
+        if color and HEX_RE.fullmatch(color) and HEX_RE.fullmatch(back) and contrast(color, back) < 3:
+            warn(f"{where}: text color {color} is hard to read on {back} in the {THEME_NAME} theme — "
+                 "drop \"color\" or pick a stronger one")
+
+
+def default_output(spec_path, cfg, cover):
+    """A spec inside a YYMMDDGroupMeeting/ folder builds into that folder; otherwise the cover date picks it."""
+    day = (cover or {}).get("_day") or datetime.date.today()
+    folder = spec_path.parent.name
+    if re.fullmatch(r"\d{6}GroupMeeting", folder):
+        if cover and cover.get("_day") and day.strftime("%y%m%d") != folder[:6]:
+            warn(f"the cover says {day:%Y.%m.%d} but the spec sits in {folder}/ — the deck goes next to the spec; "
+                 "check which date is right")
+        return spec_path.parent / f"{folder}.pptx"
+    code = day.strftime("%y%m%d")
+    root = Path(os.path.expanduser(cfg.get("output_root", "~/Documents/PairsLab")))
+    return root / f"{code}GroupMeeting" / f"{code}GroupMeeting.pptx"
 
 
 def main():
@@ -1391,21 +2270,19 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("spec", help="deck spec (JSON)")
     ap.add_argument("-o", "--output", help="output .pptx (default: spec 'output', else <output_root>/<YYMMDD>GroupMeeting/)")
+    ap.add_argument("--theme", help=f"build in this theme ({', '.join(THEMES)}), whatever the spec and config say")
     ap.add_argument("--no-validate", action="store_true", help="skip the final check of the written deck")
     deck_structure.add_arguments(ap)
     args = ap.parse_args()
 
     METRICS = Metrics()
-    if "latin" not in METRICS.fonts:
-        warn("Calibri not found locally — text fitting uses estimated widths")
-
     spec_path = Path(args.spec).resolve()
     spec = json.loads(spec_path.read_text(encoding="utf-8"))
     cfg = load_config()
     STYLE.update(cfg.get("style", {}))
+    use_theme(args.theme or spec.get("theme") or cfg.get("theme") or DEFAULT_THEME)
     planned = expand_slides(spec, cfg)
     cover = next((s for s in planned if s["type"] == "cover"), None)
-    code = ((cover or {}).get("_day") or datetime.date.today()).strftime("%y%m%d")
 
     if args.output:
         out = Path(os.path.expanduser(args.output)).resolve()
@@ -1413,25 +2290,46 @@ def main():
         out = Path(os.path.expanduser(spec["output"]))
         out = out if out.is_absolute() else (spec_path.parent / out).resolve()
     else:
-        root = Path(os.path.expanduser(cfg.get("output_root", "~/Documents/PairsLab")))
-        out = root / f"{code}GroupMeeting" / f"{code}GroupMeeting.pptx"
+        out = default_output(spec_path, cfg, cover)
     out.parent.mkdir(parents=True, exist_ok=True)
+
+    samples = template_samples()
+    missing = sorted({sample_of(s) for s in planned} - set(samples))
+    if missing:
+        raise SystemExit(f"the template has no {', '.join(missing)} slide — regenerate it with tools/make_template.py")
 
     # Build beside the deck and move it into place only once it is filled and checked, so a build that
     # stops halfway never replaces the last good deck.
     partial = out.with_name(f".{out.stem}.building{out.suffix}")
     try:
-        deck_structure.build(args, TEMPLATE, [BASE_SLIDE[s["type"]] for s in planned], TEMPLATE_SLIDES, partial)
+        deck_structure.build(args, TEMPLATE, [samples[sample_of(s)] for s in planned], tuple(samples.values()),
+                             partial)
         prs = Presentation(str(partial))
         with tempfile.TemporaryDirectory(prefix="gm_media_") as tmp:
             work = Path(tmp)
-            for slide, s in zip(prs.slides, planned):
-                if s["type"] == "cover":
-                    fill_cover(slide, s)
-                elif s["type"] in ("done", "todo"):
-                    fill_progress(slide, s, s["type"])
+            label = None                  # the part of the deck a slide belongs to, from the last section slide
+            for number, (slide, s) in enumerate(zip(prs.slides, planned), 1):
+                kind = s["type"]
+                if kind == "cover":
+                    fill_cover(slide, s, spec_path.parent, work)
+                elif kind == "closing":
+                    fill_closing(slide, s, spec_path.parent, work)
+                elif kind == "section":
+                    fill_section(slide, s)
+                    label = s["title"]
+                elif kind in ("done", "todo", "agenda"):
+                    label = None              # these frame the whole deck rather than belong to one part
+                    fill_agenda(slide, s) if kind == "agenda" else fill_progress(slide, s, kind)
+                elif kind == "statement":
+                    fill_statement(slide, s)
+                elif kind == "columns":
+                    fill_columns(slide, s, spec_path.parent, work)
+                elif kind == "timeline":
+                    fill_timeline(slide, s)
                 else:
+                    check_colors(s)
                     fill_content(slide, s, spec_path.parent, work)
+                fill_footer(slide, label, number)
                 if s.get("notes"):
                     notes = s["notes"]
                     slide.notes_slide.notes_text_frame.text = (
@@ -1443,13 +2341,16 @@ def main():
     finally:
         partial.unlink(missing_ok=True)
 
+    for family in sorted(METRICS.missing):
+        warn(f"font {family} not found locally — text fitting used estimated widths; check the render")
     if ok:
-        print(f"Wrote {out} ({len(planned)} slides)")
+        print(f"Wrote {out} ({len(planned)} slides, {THEME_NAME} theme)")
     else:
         kept = "; the deck already there is unchanged" if out.exists() else ""
         print(f"Did not write {out}: the built deck failed the check below{kept}")
     for i, s in enumerate(planned, 1):
-        print(f"  {i:2d}. [{s['type']}] {s.get('title') or 'Group Meeting'}")
+        layout = f", {s['layout']}" if s["type"] == "content" and s.get("layout", "auto") != "auto" else ""
+        print(f"  {i:2d}. [{s['type']}{layout}] {s.get('title') or 'Group Meeting'}")
     show_warnings()
     if report:
         print(report)

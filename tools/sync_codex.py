@@ -25,9 +25,11 @@ SHARED = [
     "scripts/build_deck.py",
     "scripts/slide_text.py",
     "scripts/render.py",
+    "scripts/office_render.py",
     "references/spec-format.md",
     "references/template-anatomy.md",
     "assets/template.pptx",
+    "assets/blank.pptx",
     "config.json",
     "requirements.txt",
 ]
@@ -40,14 +42,15 @@ is a clone of one of the template's sample slides, so every deck looks like the 
 hand-editing XML.
 
 ```
-assets/template.pptx           the lab template (never edit it)
+assets/template.pptx           the lab template, with sample slides for every theme (never edit it)
 scripts/build_deck.py          spec.json → .pptx
 scripts/deck_structure.py      clones the template's slides and checks the written file
 scripts/slide_text.py          prints a deck's text, slide by slide
 scripts/render.py              .pptx → slide PNGs + overview, via PowerPoint (or LibreOffice)
+scripts/office_render.py       PowerPoint through one render folder per project, granted once (render.py uses it)
 references/spec-format.md      the spec: slide types, every field, examples
 references/template-anatomy.md geometry, colors, fonts, XML — for hand edits only
-config.json                    lab defaults: output folder, list titles, house style limits
+config.json                    lab defaults: output folder, theme, list titles, house style limits
 ~/.config/pairs-group-meeting/config.json   the user's own settings (presenter…), outside the skill
 requirements.txt               Python packages the scripts need
 ```
@@ -82,13 +85,26 @@ STEP5 = """## Step 5 — QA
    Rebuild after any change to the spec.
 3. **Visual**:
    ```bash
-   $SKILL_PY <this skill>/scripts/render.py deck.pptx
+   $SKILL_PY <this skill>/scripts/render.py deck.pptx --project <your working directory>
    ```
-   On macOS this opens the deck in PowerPoint for a few seconds (up to a minute with large videos)
-   and exports exact renders; elsewhere it uses LibreOffice. PowerPoint is driven through
-   AppleScript, which a sandbox may block — if the render fails with a permission or sandbox error,
-   ask the user to approve running it outside the sandbox. It prints one PNG per slide and an
-   overview sheet. Look at every slide image with fresh eyes, in this order:
+   On macOS this renders the deck through PowerPoint in a few seconds (up to a minute with large
+   videos), with exact fonts and video posters; elsewhere it uses LibreOffice. Give the command a
+   10-minute timeout (or run it in the background): with videos it can outlast a 2-minute default.
+   PowerPoint is driven through AppleScript, which a sandbox may block — if the render fails with a
+   permission or sandbox error, ask the user to approve running it outside the sandbox. PowerPoint
+   only works inside the project's render folder, `<project>/.office-render` (the deck is copied
+   there), which it has to be granted once per project. Pass the folder this session started in as
+   `--project` so the render folder never moves. Two exits need the user:
+   - **3**, not granted yet. Before running anything else, tell the user that PowerPoint will ask
+     once: in "Grant File Access" click Select…, select the `.office-render` folder itself (it is
+     hidden: ⌘⇧. shows it, or select the project folder above it), then Grant Access. This project
+     won't ask again. Then run the `--grant` command the message prints, and render again.
+   - **4**, PowerPoint is waiting on a dialog: lost access, a sign-in or update prompt, maybe on
+     another desktop. Tell the user, run that same `--grant` command, which brings the dialog
+     forward and waits for them, then render again. Never force-quit PowerPoint.
+
+   It prints one PNG per slide and an overview sheet. Look at every slide image with fresh eyes, in
+   this order:
    - text overflowing its box or the slide, or cut off at an edge
    - overlaps — text over a figure, a caption over the logos, a table over the footnote
    - crowding — elements closer than ~0.3", a slide that feels full
@@ -105,8 +121,8 @@ For a layout the spec can't express (a 2×2 comparison grid, an annotated diagra
 timeline), build everything else first, with a placeholder `content` slide where it goes — only the
 title and `"text_only": true` — so it keeps the template's background, header band and logos. Then
 open the built deck with python-pptx in a short script and add the shapes to that slide, with the
-tokens in `references/template-anatomy.md` (colors, Calibri + 等线, safe area, sizes); keep the
-title placeholder as is and only change its text. Never add a slide from a layout: the template's
+deck theme's tokens in `references/template-anatomy.md` (palette, fonts + 等线, safe area, sizes);
+keep the title placeholder as is and only change its text. Never add a slide from a layout: the template's
 background and logos live on the slides, not the layouts. Save, re-render, inspect.
 
 Rebuilding from the spec overwrites hand edits, so make them last (or keep the script and rerun it
