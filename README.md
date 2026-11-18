@@ -68,8 +68,8 @@ in the classic look.
       <sub><b>Done last two weeks</b> — grouped by project, done / on-going in color</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/images/03-figure.jpg" alt="Figure with key sentences"><br>
-      <sub><b>Figure + key sentences</b> — a takeaway line, ≤ 3 bullets, the figure sized to fit</sub></td>
+    <td width="50%"><img src="docs/images/03-figure.jpg" alt="Figure with its takeaway line"><br>
+      <sub><b>Figure-led</b> — the takeaway line and the figure; what you say about it is in the notes</sub></td>
     <td width="50%"><img src="docs/images/04-chart.jpg" alt="Native chart slide"><br>
       <sub><b>Native chart</b> — values labeled, still editable in PowerPoint</sub></td>
   </tr>
@@ -122,30 +122,55 @@ numbers), in `paper` (formal talks) and `classic` (group meetings).
   <tr>
     <td width="50%"><img src="docs/images/forms-5-timeline.jpg" alt="Timeline of milestones"><br>
       <sub><b>Timeline</b> (classic) — done, now, next</sub></td>
-    <td width="50%"><img src="docs/images/forms-6-agenda.jpg" alt="Outline slide"><br>
-      <sub><b>Outline</b> (paper) — read from the deck's own sections</sub></td>
+    <td width="50%"><img src="docs/images/forms-6-agenda.jpg" alt="Outline slide opening part two"><br>
+      <sub><b>Outline</b> (paper) — opens each part of a formal talk, the current one highlighted</sub></td>
   </tr>
 </table>
 
 A photo or demo video can also fill half a slide out to its edge (`"layout": "split"`), and a
-formal talk ends on a `closing` slide.
+formal talk ends on a `closing` slide that carries its one takeaway.
+
+### A result and its demo / 结果配 demo
+
+When a chart and a comparison video show the same thing, they share one slide: the number says how
+much, the video what it looks like, and the condition the slide is about is marked in gold in both.
+Rendered from the same [`examples/layouts/spec.json`](examples/layouts/spec.json) (a synthetic 2×2
+figure standing in for a demo video), in the classic look.
+
+<table>
+  <tr>
+    <td width="33%"><img src="docs/images/results-1-chart.jpg" alt="A 2x2 comparison beside its chart, one panel and one bar in gold"><br>
+      <sub><b>Chart beside the demo</b> — the framed panel and the gold bar are the same condition</sub></td>
+    <td width="33%"><img src="docs/images/results-2-values.jpg" alt="A 2x2 comparison with each panel's number beside it"><br>
+      <sub><b>Each panel's number</b> — read the result off the demo itself</sub></td>
+    <td width="33%"><img src="docs/images/results-3-numbers.jpg" alt="Before and after numbers beside the comparison"><br>
+      <sub><b>Before and after</b> — the jump as two numbers, the demo as proof</sub></td>
+  </tr>
+</table>
+
+These follow how robotics and graphics labs pair numbers with videos — colors shared between the
+video labels and the chart on [EgoMimic](https://egomimic.github.io/)'s project page, the problem
+and the fix side by side in Kayvon Fatahalian's
+[Tips for Giving Clear Talks](https://graphics.stanford.edu/~kayvonf/misc/cleartalktips.pdf), a big
+number leading the evidence in [Storytelling with Data](https://www.storytellingwithdata.com/blog/2021/5/20/storytelling-with-simple-text).
 
 ## What it makes
 
 | Slide | What goes on it |
 |---|---|
 | Cover | "Group Meeting" (or the talk's title), date, presenter — and, in the paper look, a photo of your robot or setup |
-| Outline | The deck's parts, numbered; repeated before each part, it shows where the talk is |
+| Outline | For formal talks: the parts, numbered, opening each part with the current one highlighted (a single list of what's coming is left out) |
 | Section | A divider that opens each project or the paper reading; the slides after it show its name in the footer |
 | Done last two weeks | Items grouped by project, lettered `a. b. c.`, status in green (**done**) or red (**on-going**) |
-| Results | A one-line takeaway, up to 3 short bullets, and figures / embedded demo videos / native PowerPoint charts — or one photo or video filling half the slide out to its edge (`split`) |
+| Results | A one-line takeaway and figures / embedded demo videos / native PowerPoint charts, with no bullets beside them — or one photo or video filling half the slide out to its edge (`split`) |
+| Result + demo | A chart and the comparison video that shows it on one slide: the chart beside the video, each panel's number beside the panel, or the before and after as big numbers — the condition that matters framed and gold in both |
 | Key message | One sentence set large, with the number it is about (`36%`) |
-| Columns | Two to four parallel points — contributions, conditions, method parts — each a heading, a line and optionally a small chart, with hairlines instead of boxes |
-| Timeline | Milestones or steps along a line, done / now / next |
+| Columns | Two to four parallel points — contributions, conditions, method parts — each a heading, one line and optionally a small chart, with hairlines instead of boxes |
+| Timeline | Milestones along a line, done / now / next |
 | Paper reading | Per paper: the authors' original pipeline figure with its problem and approach, then novelty and limitations side by side — all supplied by you, never guessed |
 | Paper comparison | Per theme of 3–5 papers: a methods table, then a results table (best value bolded) — tables only, no figures. Example: [`examples/papers/spec.json`](examples/papers/spec.json) (synthetic) |
 | Todo | Next steps per project |
-| Closing | "Thank you" and a line or two, on the cover's page — for formal talks |
+| Closing | The talk's one takeaway and a line or two (questions, contact), on the cover's page — for formal talks |
 
 Every new page form is shown in [`examples/layouts/spec.json`](examples/layouts/spec.json).
 
@@ -171,10 +196,25 @@ rather than from page colors.
 Set in `skills/pairs-group-meeting/config.json` → `style`; the builder enforces the font floor and
 warns about the rest:
 
-- **All English** — notes written in Chinese are translated.
+- **All English** — notes written in Chinese are translated. Speaker notes stay in your language.
 - **Body text ≥ 22pt** — text is never shrunk below it; the slide gets cut or split instead.
-- **Few words, key sentences** — a one-line takeaway plus ≤ 3 bullets of ≤ 14 words.
+- **The slide shows, you explain** — every slide's subtitle is its takeaway, and read in order the
+  subtitles tell the story; a slide with a figure, chart or video has no bullets; about 25 words a
+  slide and never more than 35; the explanation goes in the speaker notes.
 - **Show it** — every results slide has a figure, demo video or chart (paper-comparison slides are the exception: tables only).
+- **Outline first** — before building, `build_deck.py --outline` lists every slide with its
+  takeaway and word count, and you get that list to approve or change before the deck is made.
+
+The rules borrow from other research-talk skills: the word budget and the check on a finished deck
+from [present-paper](https://github.com/aperivue/medsci-skills/tree/main/skills/present-paper), the
+text budget for result slides and the list of stock phrases from
+[nature-paper2ppt](https://github.com/yuan1z0825/nature-skills/tree/main/skills/nature-paper2ppt),
+the outline checkpoint and figure-first slides from
+[paper-slides](https://github.com/wanshuiyin/auto-claude-code-research-in-sleep/tree/main/skills/paper-slides),
+the titles-tell-the-story test and ending on the conclusion from
+[academic-pptx](https://github.com/Gabberflast/academic-pptx-skill), and a claim with its evidence
+instead of bullets from
+[antislop-decks](https://github.com/jhuse25/anti-slop-design-skills/tree/main/skills/antislop-decks).
 
 ## Requirements
 
@@ -247,11 +287,12 @@ Just ask Claude Code or Codex, in Chinese or English (in Codex you can also call
 > 帮我做 11.12 组会的 PPT。这两周 Vision-EMG 采完了 3 个人的数据，融合模型遮挡下 MAE 从 14.9° 降到 9.6°，
 > 论文 method 部分在写。结果图在 ~/figs/mae.png，demo 视频 ~/videos/occlusion.mp4。下两周采完剩下 2 人、写完初稿。
 
-Claude collects what's missing, plans the slides, writes a deck spec, builds it, renders every slide
+Claude collects what's missing, plans the slides, writes a deck spec and shows you the slide list —
+each slide's takeaway and word count — for a go-ahead; then it builds the deck, renders every slide
 and checks it before handing you the `.pptx`.
 
 For a formal talk, say what the occasion is; it takes the paper look, with the talk's title on the
-cover, an outline, sections and a closing slide:
+cover, the parts opened by sections (or an outline), and a closing slide that carries the takeaway:
 
 > 下周三在 ICRA 做 15 分钟口头报告，题目 Seeing Hands Through Occlusion，用 paper 风格。
 > 主要讲三件事：多模态采集系统、融合模型、遮挡下的结果，材料都在 ~/talk/ 里。
@@ -285,7 +326,8 @@ PPT 本身是全英文的，你对 Claude 说中文、贴中文笔记都可以�
 
 1. 对 Claude Code 或 Codex 说一句话：会议日期、这两周做了什么、结果图和 demo 视频的路径（见上面 Use 里的例子）。
 2. Claude 一次性问清缺的东西：哪些结果还没有图、论文还缺哪几项、上次的 Todo 哪些做完了。
-3. 它写出 `deck_spec.json`，构建 `.pptx`，用 PowerPoint 渲染每一页并检查，然后交给你。
+3. 它写出 `deck_spec.json`，先把页面清单发给你确认：每页一行副标题（这页的结论）和字数，按顺序读下来就是这次汇报的故事线。
+   你同意或改完以后，它再构建 `.pptx`，用 PowerPoint 渲染每一页并检查，然后交给你。
    第一次在某个项目里渲染时，PowerPoint 会弹一次"授予文件访问权限"：点"选择…"，选中项目里的
    `.office-render` 文件夹（隐藏文件夹，按 ⌘⇧. 显示），或者直接选项目文件夹本身，再点"授予访问权限"。
    之后这个项目不会再问，渲染时 PowerPoint 也不会跳到前台。
@@ -304,13 +346,13 @@ PPT 本身是全英文的，你对 Claude 说中文、贴中文笔记都可以�
 |---|---|---|
 | 1 | Cover | 日期和你的名字 |
 | 2 | Done last two weeks | 按项目分组，每条标 done 或 on-going |
-| 3 | Results | 一页一个结论，配图 / 图表 / demo 视频，数量按工作量定。最想让大家记住的那个结果可以单独做一页核心结论（statement），实验装置照片或 demo 可以做半页照片页（split） |
+| 3 | Results | 一页一个结论，配图 / 图表 / demo 视频，数量按工作量定；有图的页不写要点，要讲的话放 notes。最想让大家记住的那个结果可以单独做一页核心结论（statement），实验装置照片或 demo 可以做半页照片页（split）。讲自己论文的故事线时，用论文自己的 Fig. 1 和方法图做两页就够 |
 | 4 | Paper reading | 可选。每篇论文 2 页 |
 | 5 | Paper comparison | 可选。读了 2 篇以上才有，放在论文之后 |
 | 6 | Todo | 下两周要做的事；带日期的里程碑可以做成时间线（timeline） |
 
 一般 8–14 页，每页讲 1.5–2 分钟。讲两个以上项目、或者有论文部分时，每部分前面加一页分节页（section），
-后面每页的页脚会显示这一部分的名字；有三个或更多部分时，封面后加一页目录（agenda），它会自动列出各个分节。
+后面每页的页脚会显示这一部分的名字。组会不放目录页：只列"接下来讲什么"的目录不传达任何内容。
 
 ### 正式场合怎么排（paper 风格）
 
@@ -319,12 +361,11 @@ PPT 本身是全英文的，你对 Claude 说中文、贴中文笔记都可以�
 | 顺序 | 页 | 内容 |
 |---|---|---|
 | 1 | Cover | 报告题目（不是 Group Meeting）、日期、名字，再加一行场合或单位；右侧可以放一张照片 |
-| 2 | Outline | 目录，自动列出各个分节 |
-| 3 | 各部分 | 每部分前一页分节页；长报告可以在每部分前再放一次目录，高亮当前讲到的那一节 |
-| 4 | Key message | 全场最重要的一两个结论，一句话放大，配上数字 |
-| 5 | Columns | 贡献点、方法的几个模块、几种实验条件，每栏一个小标题加一行字 |
-| 6 | Timeline | 研究计划或路线，可选 |
-| 7 | Closing | Thank you / Questions，加一两行联系方式 |
+| 2 | 各部分 | 每部分前一页分节页；三个以上部分的长报告，也可以改用目录页（agenda）开每一部分，高亮当前要讲的那一部分，两种二选一 |
+| 3 | Key message | 全场最重要的一两个结论，一句话放大，配上数字 |
+| 4 | Columns | 贡献点、方法的几个模块、几种实验条件，每栏一个小标题加一行字 |
+| 5 | Timeline | 研究计划的里程碑，可选 |
+| 6 | Closing | 标题写整场报告最重要的一句结论（提问时一直挂着），下面一两行写 Questions、联系方式；不用空的 Thank you |
 
 页数按时长定，每页讲 1.5–2 分钟，比如 15 分钟的会议报告大约 8–10 页。规矩和组会一样：全英文、正文不小于 22pt、一页一个结论。
 
@@ -340,12 +381,13 @@ PPT 本身是全英文的，你对 Claude 说中文、贴中文笔记都可以�
 
 让 PPT 不单调，靠的是换页面形式，而不是换底色：
 
-- **目录**（`agenda`）：自动列出各个分节；正式报告里每节前重复一次，高亮当前讲到的那一节
+- **目录**（`agenda`）：只用于三个以上部分的正式报告，放在每部分开头代替分节页，高亮当前这一部分；只放一页的目录会警告
 - **核心结论**（`statement`）：一句话放大，配上它说的那个数字，比如"36%"。留给最想让大家记住的一两个结果
+- **结果配 demo**：图表和对比视频讲的是同一件事时放在一页。视频写上 `grid`（几×几的格子），三种放法任选：图表放在视频旁边，同一个条件在视频里加框、在图里标金色；每个格子旁边直接写它的数字（`values`）；左边用大数字讲前后对比（`numbers`），右边放视频
 - **并列要点**（`columns`）：2–4 栏，每栏一个小标题加一行字，可以各配一张小图表；适合贡献点、几种条件、方法的几个部分
-- **照片和 demo**（`"layout": "split"`）：照片或视频占满半页、一直延伸到页面边缘，文字在另一边
-- **时间线**（`timeline`）：里程碑或步骤，分完成 / 进行中 / 计划中
-- **结尾页**（`closing`）：Thank you + 一两行，正式报告用
+- **照片和 demo**（`"layout": "split"`）：照片或视频占满半页、一直延伸到页面边缘，另一边只有副标题和一行图注
+- **时间线**（`timeline`）：带日期的里程碑，分完成 / 进行中 / 计划中；pipeline 用图，不做成文字时间线
+- **结尾页**（`closing`）：标题是整场报告的结论，下面一两行写 Questions、联系方式，正式报告用
 - paper 的封面可以放一张照片（机器人、实验装置、demo 截图）：cover 里加 `"image"`
 - 图表颜色交给主题；要把基线/"before" 压暗写 `"color": "muted"`，突出自己的结果用 `highlight`
 
@@ -399,15 +441,19 @@ PPT 本身是全英文的，你对 Claude 说中文、贴中文笔记都可以�
 
 - **全英文**：标题、要点、表格、图注都是英文，专有名词保持原样（MAE、TCN、HaMeR）
 - **正文不小于 22pt**：放不下就删字或拆页，不缩字号
-- **少字**：一页一个结论，一行副标题讲结论，最多 3 条要点，每条不超过 14 个词
+- **页面只放结论和证据，解释靠讲**：每页一行副标题写结论，所有副标题按顺序读下来就是故事线
+- **有图的页不写要点**：标题、副标题、图，最多再加一行不超过 8 个词的图注；没有图的页最多 3 条要点，每条不超过 14 个词
+- **每页约 25 个词，最多 35 个**：标题、副标题、要点、图注、栏和时间线的文字都算，构建时超了会警告；封面、分节、Done、Todo 和论文页不算
 - **结果页要有图**：图、图表或 demo 视频；论文对比页是例外，只放表格
-- **内容页白底**：两种风格的内容页都是白底；想让 PPT 不单调，就换页面形式（目录、核心结论、并列、时间线、半页照片），不换底色
-- **细节放 notes**：想多讲的话写在 speaker notes 里，不要塞进页面
+- **内容页白底**：两种风格的内容页都是白底；想让 PPT 不单调，就换页面形式（核心结论、并列、时间线、半页照片），不换底色
+- **每页都有中文 notes**：以【这页讲】开头，先一句话说这页的结论，再写解释、背后的数字和想问大家的问题；不用"一句话总结""值得注意的是""不是……而是……"这类套话
 
 ### 7. 构建时的 WARNING
 
 构建结束会打印 WARNING，每一条都要处理，Claude 会照着改：缺图缺字段会回来问你，要点太长会让你缩短或拆页，
+有图的页写了要点、一页超过 35 个词、全份每页字数中位数超过 25 会提醒把话挪进 notes，
 论文对比超过 5 篇会建议拆主题。完整的警告和处理办法见 [`SKILL.md`](skills/pairs-group-meeting/SKILL.md)。
+不想构建、只想看页面清单和字数，就加 `--outline`。
 
 ### 8. 一个完整的例子
 
@@ -443,7 +489,7 @@ tools/make_template.py       makes assets/template.pptx: the lab template + ever
 tools/template/              its sources: the lab's original template and the lab's logos
 examples/demo/               a demo spec with synthetic data
 examples/papers/             paper-reading and paper-comparison slides, synthetic data
-examples/layouts/            outline, key message, columns, timeline and closing slides, synthetic data
+examples/layouts/            a formal talk: outline, key message, result + demo, columns, timeline, closing and backup, synthetic data
 ```
 
 **Changing the skill:** edit the original in `skills/pairs-group-meeting/`, then run

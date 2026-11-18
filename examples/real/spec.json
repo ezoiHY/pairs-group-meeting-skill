@@ -71,14 +71,10 @@
       "type": "content",
       "title": "Vision-EMG fusion framework",
       "subtitle": "Each joint takes the more reliable of EMG/IMU and vision",
-      "bullets": [
-        "Motion prior combines the previous pose with EMG/IMU",
-        "Grasp memory and per-user memory guide the update",
-        "Outputs both-hand pose with per-joint uncertainty"
-      ],
       "media": [
         "/Users/harry/Documents/PairsLab/mermaid-diagram.png"
-      ]
+      ],
+      "notes": "【这页讲】融合框架：每个关节取 EMG/IMU 和视觉里更可靠的那一路。运动先验把上一帧姿态和 EMG/IMU 结合起来；抓取记忆和每个用户自己的记忆指导更新；最后输出双手姿态，每个关节带一个不确定度。"
     },
     {
       "type": "content",

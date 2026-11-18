@@ -12,7 +12,9 @@ against the spec file's own folder, so keep the spec next to the deck it builds.
 | `output` | no | Where to write the .pptx. Default: next to the spec as `<folder>.pptx` when the spec sits in a `YYMMDDGroupMeeting/` folder (the build warns if the cover date disagrees); otherwise `<output_root>/<YYMMDD>GroupMeeting/<YYMMDD>GroupMeeting.pptx`, with `YYMMDD` from the cover date and `output_root` from `config.json`. `-o` on the command line wins over both. |
 | `cover` | no | `false` to build without a cover. Otherwise a cover is added automatically if `slides` has none. |
 
-Every slide takes an optional `"notes"`: speaker notes, plain text.
+Every slide takes an optional `"notes"`: speaker notes, plain text (a string, or a list of lines) —
+what the presenter says on that slide, in their own language; the build warns about stock phrases
+in them (一句话总结, 值得注意的是, 不是……而是……).
 
 ## Themes
 
@@ -30,7 +32,8 @@ A spec or config that still names the retired `midnight` theme builds in `classi
 warning, and a slide's old `"tone"` key is ignored with a warning.
 
 Content slides carry a footer: the slide number, and the name of the part of the deck they belong
-to — the title of the last `section` slide (cleared again by a Done, Todo or agenda slide).
+to — the title of the last `section` slide, or the part an `agenda` with `current` opens (cleared
+again by a Done or Todo slide, or an agenda without `current`).
 
 The build warns about every key it doesn't know — anywhere in the spec, with the closest valid
 name — and about `layout` / `valign` values outside the lists below. Such keys would otherwise be
@@ -46,6 +49,25 @@ slide. A media item, chart, series, item or
 bullet missing the key it can't do without (`path`, `categories`, `values`, `text`…) stops the
 build. When the build stops on an error, the warnings so far are printed too, and the deck
 already at the output path is left as it was.
+
+## Words on a slide
+
+The build counts the words the audience reads on each `content`, `statement`, `columns` and
+`timeline` slide of the spec: title, subtitle, bullets, captions, panel `values` and `numbers`, the
+statement's number, text and detail, column headings and lines, timeline labels and steps, and the
+footnote — not table cells, chart labels or notes. It warns when one slide is over `style.max_words_per_slide` (35) and when
+the median over these slides is over `style.median_words_per_slide` (25). The cover, sections,
+agenda, Done and Todo, and the slides it makes from `paper` and `compare`, have limits of their own
+and are not counted. A build lists each counted slide with its count; `--outline` prints the same
+counts with every slide's message line and builds nothing:
+
+```bash
+python scripts/build_deck.py deck_spec.json --outline
+```
+
+The build also warns about bullets beside a figure, video or chart, a content, columns or
+timeline slide without a subtitle, a caption over `style.max_words_per_caption` (8) words, and
+filler that narrates the slide ("we can see", "as shown in", "the key takeaway is").
 
 ## `cover`
 
@@ -65,16 +87,19 @@ For a formal talk give the talk's own `title` and put the event or affiliation i
 
 ## `agenda`
 
-The talk's parts, numbered, one per row between hairlines. Put it after the cover; to show where
-the talk is, repeat it before each part with `current` set.
+The talk's parts, numbered, one per row between hairlines — for a formal talk of three or more
+parts, never a group meeting. It opens each part in place of a section slide, with `current` set
+to that part, so the audience sees where they are; the slides after it show that part's name in
+their footer, as after a section slide. One agenda without `current` only lists what is coming, and
+the build warns about it.
 
 ```json
-{"type": "agenda", "current": 2}
+{"type": "agenda", "items": ["Why hands vanish", "Fusion", "What is next"], "current": 1}
 ```
 
 | Key | Default | Notes |
 |---|---|---|
-| `items` | the deck's `section` titles, in order | The parts, as strings, one line each (32pt down to 22pt). Keep to six or fewer. Without items and without sections the slide is left out with a warning. |
+| `items` | the previous agenda's items, else the deck's `section` titles, in order | The parts, as strings, one line each (32pt down to 22pt). Keep to six or fewer. Give them on the first agenda; the next ones reuse them. Without items, an earlier agenda or sections the slide is left out with a warning. |
 | `current` | none | The part about to start: its number (1-based) or its title. It is set bold, with the gold bar in `classic`; the others are muted. |
 | `title` | `Outline` | |
 | `subtitle` | none | As on `content`. |
@@ -129,7 +154,6 @@ least `style.min_font_size` (22pt); only the title (36pt) and the footnote (12pt
 ```json
 {"type": "content", "title": "Occlusion results",
  "subtitle": "Fusion cuts occluded error by 36%",
- "bullets": ["Biggest gain where vision fails", "Non-occluded accuracy also improves"],
  "media": [{"chart": {"type": "bar", "categories": ["Occluded", "Non-occluded"],
                       "series": [{"name": "Vision only", "values": [14.9, 8.1]},
                                  {"name": "Vision + EMG", "values": [9.6, 7.1]}],
@@ -137,19 +161,22 @@ least `style.min_font_size` (22pt); only the title (36pt) and the footnote (12pt
             "caption": "Joint angle MAE, lower is better"},
            {"path": "videos/demo.mp4", "caption": "Watch the index finger"}],
  "footnote": "Wang et al., CVPR 2025",
- "layout": "auto"}
+ "layout": "auto",
+ "notes": "【这页讲】遮挡时误差降得最多；没遮挡时也略好。视频里看食指。"}
 ```
 
 | Key | Notes |
 |---|---|
 | `title` | Required. classic: 36pt white in the header band; widens, then shrinks to 24pt, to stay on one line. paper: 36pt Georgia at the top left, shrinking to 26pt. |
-| `subtitle` | One line under the title (24pt, down to 22pt) — the slide's takeaway as a plain sentence, or a paper's full title. Bold in classic, Georgia italic in paper. |
-| `bullets` | Strings or `{"text", "level": 0/1, "bullet": false, "bold": true, "color": "980000"}`. `bullet: false` makes a plain paragraph. `**bold**` inline. 28pt down to 22pt when alone, 24pt down to 22pt next to a visual. The build warns above `style.max_bullets_per_slide` (3) bullets or `style.max_words_per_bullet` (14) words. A number and its unit (`1 ms`, `60 Hz`, `9.6 °`) are never split across lines, here or anywhere else. |
+| `subtitle` | One line under the title (24pt, down to 22pt) — the slide's takeaway as a plain sentence, or a paper's full title. Bold in classic, Georgia italic in paper. The build warns without one. |
+| `bullets` | Strings or `{"text", "level": 0/1, "bullet": false, "bold": true, "color": "980000"}`. `bullet: false` makes a plain paragraph. `**bold**` inline. 28pt down to 22pt when alone, 24pt down to 22pt next to a visual. For parallel points on a slide without media: beside a figure, video or chart the build warns about any bullet (the subtitle and caption carry that slide, the notes the rest), and anywhere above `style.max_bullets_per_slide` (3) bullets or `style.max_words_per_bullet` (14) words. A number and its unit (`1 ms`, `60 Hz`, `9.6 °`) are never split across lines, here or anywhere else. |
 | `table` | `header` (optional), `rows`, optional `col_widths` (ratios), `align` (`left`/`center`/`right` per column), `font_size`. Cells are strings or `{"text", "bold", "color", "fill"}`. Font: 24pt or 22pt — the larger one when it fits without wrapping more cells, and never larger than the slide's bullets. At 22pt only ~4–6 short rows fit; for more numbers use a `chart`. Columns are sized for that font; a narrow table keeps its natural width and is centered. `font_size` forces a size (columns still sized for it) and warns if cells then wrap; it is never below the house minimum. `align` may also be one word for every column; `align` and `col_widths` should have one entry per column (the build warns otherwise). A table with no `rows` is left out with a warning. classic draws a filled header and hairlines between rows, paper draws booktabs rules (above, under the header, below); no vertical lines in either. |
-| `media` | Strings (paths), `{"path", "caption", "poster", "page", "focus", "crop"}`, or `{"chart": {…}, "caption", "aspect"}`. `focus` and `crop` matter only in the `split` layouts. Images: png, jpg, gif, bmp, tif, webp, and on macOS heic; the format is read from the file, and a rotated phone photo is turned upright (and stays a JPEG). `pdf` and `svg` are rasterized at 220 dpi (`page` picks a PDF page, default 1). Videos: mp4, m4v, mov, avi, wmv — embedded and playable in PowerPoint; the poster frame comes from macOS Quick Look unless `poster` names an image. Captions are 22pt, centered under the item — keep them to ≤ 8 words. |
+| `media` | Strings (paths), `{"path", "caption", "poster", "page", "focus", "crop"}`, or `{"chart": {…}, "caption", "aspect"}`. `focus` and `crop` matter only in the `split` layouts. Images: png, jpg, gif, bmp, tif, webp, and on macOS heic; the format is read from the file, and a rotated phone photo is turned upright (and stays a JPEG). `pdf` and `svg` are rasterized at 220 dpi (`page` picks a PDF page, default 1). Videos: mp4, m4v, mov, avi, wmv — embedded and playable in PowerPoint; the poster frame comes from macOS Quick Look unless `poster` names an image. Captions are 22pt, centered under the item, and say where to look — the build warns above `style.max_words_per_caption` (8) words. |
 | `media[].chart` | A native, editable PowerPoint chart, laid out like an image (default `aspect` 1.6). `type`: `bar` (columns), `hbar` (first category on top), `line`. `categories`: x labels. `series`: `[{"name", "values", "color"?}]` — a legend appears for 2+ series; leave `color` out to use the theme's palette, or give `"muted"` for a baseline / "before" series. `number_format`: Excel format for labels, e.g. `"0.0"`, `"0%"`, `"0.0\"°\""`. `labels` (default on for bars, off for lines): value labels, which also hide the value axis. `highlight`: category names drawn in the theme's accent, gold (single-series bars) — use it for "ours". `y_min` / `y_max`: axis range. |
+| `media[].grid` | For a video or figure made of panels — a 2×2 comparison, three views in a row: `[columns, rows]` (or `"2x2"`). Panels are numbered 1, 2, … left to right, top to bottom. With it, `highlight` frames panels in the theme's accent — the color a chart's `highlight` uses, so one method is marked the same in both (`"highlight": [4]`); and `values` puts one short text per panel beside it (`["reference", "7.1°", "14.9°", "9.6°"]`, `""` for none) when the video or figure is alone on the slide: a number large — in the accent color on a highlighted panel — and a word small and muted; beside a grid of one or two columns, under a single row. Not in the `split` layouts or in `columns`. See [A result and its demo](#a-result-and-its-demo). |
+| `numbers` | A result's before and after as big numbers down the left of the slide, beside its first video or figure: `{"label", "items": [{"value", "text", "detail", "panel"}]}`. The last item is the result — the accent color, larger, beside the theme's mark; the earlier ones are muted. `text` names the condition (≤ 6 words), `detail` adds a line, `panel` frames that panel of the video's `grid` in the same color. One to three items; on this slide bullets and a table are left out. |
 | `media_rows` | Force the number of media rows. Default: the row count that makes the media largest. |
-| `layout` | `auto` (default), `text-left`, `text-right`, `stack`, `fit`, `split`, `split-left`. `auto` = `text-left` when there are bullets and media but no table, else `stack`. `fit` = `stack` when every media item is wide (width/height ≥ 2.6), else `auto` — for figure-led slides such as a paper's pipeline. `split` / `split-left`: one photo or video fills the right / left half of the slide out to its edge, under the header, and the subtitle and bullets sit beside it, centered — for the robot, the setup, a demo. A photo is cropped to fill the half around its `focus` (`[x, y]`, 0–1 from the top left); a video keeps its whole frame, as wide as the half; `"crop": true` / `false` in the media item switches either. Only the first photo or video is used; a chart or table falls back to `auto` with a warning. A caption goes at the bottom of the text column. |
+| `layout` | `auto` (default), `text-left`, `text-right`, `stack`, `fit`, `split`, `split-left`. `auto` = `text-left` when there are bullets and media but no table, else `stack`. `fit` = `stack` when every media item is wide (width/height ≥ 2.6), else `auto` — for figure-led slides such as a paper's pipeline. `split` / `split-left`: one photo or video fills the right / left half of the slide out to its edge, under the header, and the subtitle (and caption) sit beside it, centered — for the robot, the setup, a demo. A photo is cropped to fill the half around its `focus` (`[x, y]`, 0–1 from the top left); a video keeps its whole frame, as wide as the half; `"crop": true` / `false` in the media item switches either. Only the first photo or video is used; a chart or table falls back to `auto` with a warning. A caption goes at the bottom of the text column. |
 | `text_width` | Bullet column share for `text-left` / `text-right`, between `0.15` and `0.75` (default `0.38`). |
 | `footnote` | Small muted 12pt line at the bottom left, in the footer — citations, data sources only. |
 | `text_only` | `true` silences the "no figure, demo video or chart" warning, for a genuine discussion slide. |
@@ -159,6 +186,51 @@ How `stack` places things, top to bottom: subtitle → bullets (≤45% of the he
 blocks follow) → table (≤55% when media follow) → media in the remaining space. Media alone are
 centered vertically; otherwise they start right under the block above. In `text-left` /
 `text-right`, bullets get their own column and the table and media stack in the other column.
+
+### A result and its demo
+
+When a chart and a demo video show the same comparison, put them on one slide: the number says how
+much, the video what it looks like. Mark the condition the slide is about in the same accent color in
+both. Three ways to do it:
+
+**The chart beside the demo** — two media: the video with `grid` and `highlight`, the chart with its
+own `highlight` on the same condition.
+
+```json
+{"type": "content", "title": "Occlusion, seen and counted",
+ "subtitle": "EMG keeps the fingers that vision loses",
+ "media": [{"path": "videos/occlusion_2x2.mp4", "grid": [2, 2], "highlight": [4]},
+           {"chart": {"type": "hbar",
+                      "categories": ["Vision · clear", "Vision + EMG · clear", "Vision · hidden", "Vision + EMG · hidden"],
+                      "series": [{"name": "MAE", "values": [8.1, 7.1, 14.9, 9.6]}],
+                      "highlight": ["Vision + EMG · hidden"], "number_format": "0.0\"°\""},
+            "caption": "Joint-angle MAE, lower is better"}]}
+```
+
+**Each panel's number beside it** — the video alone with `values`; one caption says what the numbers are.
+
+```json
+{"type": "content", "title": "Hidden fingers, side by side",
+ "subtitle": "Fusion cuts the occluded error the most",
+ "media": [{"path": "videos/occlusion_2x2.mp4", "grid": [2, 2], "highlight": [4],
+            "values": ["8.1°", "7.1°", "14.9°", "9.6°"], "caption": "Joint-angle MAE per panel"}]}
+```
+
+**Before and after, with the demo as proof** — `numbers` beside the video; each number frames its panel.
+
+```json
+{"type": "content", "title": "Hidden fingers: before and after",
+ "subtitle": "EMG brings occluded error near the clear view",
+ "numbers": {"label": "Occluded joint-angle MAE",
+             "items": [{"value": "14.9°", "text": "Vision only", "panel": 3},
+                       {"value": "9.6°", "text": "Vision + EMG", "detail": "3 subjects", "panel": 4}]},
+ "media": [{"path": "videos/occlusion_2x2.mp4", "grid": [2, 2]}]}
+```
+
+A comparison video works best when only the compared condition changes between its panels — the
+same clip, camera and speed — and each panel's label is burned into it. The build warns when a
+`highlight`, a `values` list or a `panel` doesn't fit the `grid`, when `values` share the slide with
+other media, and when these keys sit on a chart or in a layout that can't show them.
 
 ## `statement`
 
@@ -185,20 +257,20 @@ it. Use a statement for the one or two messages a talk must leave behind, not fo
 ## `columns`
 
 Two to four points side by side — contributions, challenges, the parts of a method, the
-conditions of an experiment — each a heading and a line or two, optionally under a visual.
-Hairlines separate the columns; there are no boxes.
+conditions of an experiment — each a heading and one line, optionally under a visual. Hairlines
+separate the columns; there are no boxes.
 
 ```json
-{"type": "columns", "title": "What makes fusion work", "subtitle": "Three choices carry most of the gain",
+{"type": "columns", "title": "What makes fusion work", "subtitle": "Three choices carry the gain",
  "columns": [
-   {"heading": "Per-joint weights", "text": "Each joint trusts the source that sees it best"},
-   {"heading": "Visibility gate", "text": "Camera confidence decides when EMG takes over"},
-   {"heading": "One clock", "text": "A hardware trigger keeps video and EMG within 1 ms"}]}
+   {"heading": "Per-joint weights", "text": "Each joint trusts its best source"},
+   {"heading": "Visibility gate", "text": "Camera confidence hands off to EMG"},
+   {"heading": "One clock", "text": "One trigger syncs video and EMG"}]}
 ```
 
 | Key | Notes |
 |---|---|
-| `columns` | Required, 2–4 (more are cut with a warning). Each: `heading` (≤ 6 words), `text` (a string or a list of up to two lines, ≤ 14 words each), `media` (optional: one image, video or chart, as in `content`; its caption is left out — the heading says what it shows). |
+| `columns` | Required, 2–4 (more are cut with a warning). Each: `heading` (≤ 6 words), `text` (one line, ≤ `style.max_words_per_item` (10) words; the build warns about a second line — only a paper's Novelty \| Limitations slide has two), `media` (optional: one image, video or chart, as in `content`; its caption is left out — the heading says what it shows). |
 | `title`, `subtitle`, `footnote` | As on `content`. |
 
 All columns share one heading size and one text size. Text-only columns sit in the middle of the
@@ -207,7 +279,8 @@ visuals on top in one row. A size that would leave a single word alone on a line
 
 ## `timeline`
 
-Milestones or steps along one line: a date or step name above each marker, a line or two under it.
+Milestones along one line: a date or step name above each marker, a line or two under it. A
+pipeline or method is a figure, not a timeline of text.
 
 ```json
 {"type": "timeline", "title": "Road to the paper",
@@ -291,15 +364,17 @@ for those.
 
 ## `closing`
 
-The last slide of a formal talk, on the cover's page.
+The last slide of a formal talk, on the cover's page. Its title is the talk's one takeaway, which
+stays up during the questions.
 
 ```json
-{"type": "closing", "lines": ["Questions welcome", "yu.han@example.edu"]}
+{"type": "closing", "title": "Muscle signals see what the camera cannot",
+ "lines": ["Questions welcome", "yu.han@example.edu"]}
 ```
 
 | Key | Default | Notes |
 |---|---|---|
-| `title` | `Thank you` | Fitted like the cover title. |
+| `title` | `Thank you`, with a warning | The takeaway, fitted like the cover title. A "Thank you" or "Questions?" title is warned about too. |
 | `lines` | none | Lines under the title, like the cover's date and name. |
 | `image` | none | As on `cover` (`paper` only). |
 
@@ -321,8 +396,8 @@ The last slide of a formal talk, on the cover's page.
                "rows": [["Vision", "8.10°", "14.9°"], ["Vision + EMG", "**7.08°**", "**9.6°**"]]},
      "media": [{"path": "figs/mae_curve.png", "caption": "Validation MAE per epoch"}]},
     {"type": "content", "title": "Demo: occluded grasp", "layout": "split",
-     "subtitle": "The fused hand keeps all five fingers", "bullets": ["Watch the index finger"],
-     "media": ["videos/fusion_demo.mp4"]},
+     "subtitle": "The fused hand keeps all five fingers",
+     "media": [{"path": "videos/fusion_demo.mp4", "caption": "Watch the index finger"}]},
     {"type": "paper", "title": "Paper A", "venue": "CVPR 2025",
      "full_title": "Paper A: Occlusion-Aware Hand Pose Estimation with Temporal Priors",
      "pipeline": "figs/paper_a_fig2.png",

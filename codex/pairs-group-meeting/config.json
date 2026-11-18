@@ -9,6 +9,9 @@
     "min_font_size": 22,
     "max_bullets_per_slide": 3,
     "max_words_per_bullet": 14,
-    "max_words_per_item": 10
+    "max_words_per_item": 10,
+    "max_words_per_caption": 8,
+    "max_words_per_slide": 35,
+    "median_words_per_slide": 25
   }
 }

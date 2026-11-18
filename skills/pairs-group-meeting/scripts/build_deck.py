@@ -9,6 +9,7 @@ of the skill share this file and differ only in deck_structure.py.
 
 Usage:
     python build_deck.py spec.json [-o out.pptx] [--no-validate] [--pptx-skill DIR (Claude version)]
+    python build_deck.py spec.json --outline     the slides, subtitles and word counts; builds nothing
 
 The spec format is documented in references/spec-format.md.
 """
@@ -19,6 +20,7 @@ import difflib
 import json
 import os
 import re
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -192,7 +194,8 @@ WARNINGS = []
 
 # House style; config.json "style" overrides these.
 STYLE = {"language": "en", "min_font_size": 22, "max_bullets_per_slide": 3, "max_words_per_bullet": 14,
-         "max_words_per_item": 10, "max_compare_papers": 5, "max_compare_columns": 5}
+         "max_words_per_item": 10, "max_words_per_caption": 8, "max_words_per_slide": 35,
+         "median_words_per_slide": 25, "max_compare_papers": 5, "max_compare_columns": 5}
 
 
 def warn(msg):
@@ -534,7 +537,7 @@ def fill_cover(slide, s, base_dir, work):
 
 
 def fill_closing(slide, s, base_dir, work):
-    """The last slide of a talk, on the cover's page: "Thank you" and a line or two (questions, contact)."""
+    """The last slide of a talk, on the cover's page: the talk's takeaway and a line or two (questions, contact)."""
     fill_title_page(slide, s.get("title") or "Thank you", list(s.get("lines", [])), s.get("image"), base_dir, work,
                     "closing slide")
 
@@ -1291,14 +1294,179 @@ def media_layout(items, box, rows=None, valign="top", what="media"):
 
 
 def add_media(slide, items, box, rows=None, valign="top", what="media"):
+    """Lay out and add the media with their captions and panel marks; returns (height used, placements)."""
     placed, used = media_layout(items, box, rows, valign, what)
     for k, (it, (x, y, w, h), (cell_x, cell_w), cap) in enumerate(placed, 1):
         add_media_item(slide, it, (x, y, w, h), k)
+        mark_panels(slide, it, (x, y, w, h), k)
         if it.get("caption"):
             tb = add_textbox(slide, (cell_x - GAP / 2, y + h + 0.04 * EMU_PER_IN, cell_w + GAP, cap), f"Caption {k}")
             write_paragraphs(tb.text_frame._txBody, [Para(inline_runs(it["caption"], color=P["muted"]), algn="ctr",
                                                           color=P["muted"])], STYLE["min_font_size"])
-    return used
+    return used, placed
+
+
+# ---------------------------------------------------------------------------
+# A video or figure made of panels (`grid`): a 2×2 comparison, three views side by side. Its panels are
+# numbered 1, 2, … left to right, top to bottom. A panel can be framed in the accent color — the same
+# color as the highlighted bar of the chart beside it — and carry its number beside it (`values`).
+
+
+def panel_box(box, grid, k):
+    """Panel k of a grid item laid out in box."""
+    x, y, w, h = box
+    cols, rows = grid
+    col, row = (k - 1) % cols, (k - 1) // cols
+    return x + col * w / cols, y + row * h / rows, w / cols, h / rows
+
+
+def add_frame(slide, box, color, width_pt, name):
+    """An outline just inside box, so it never spills onto the next panel."""
+    from pptx.dml.color import RGBColor
+    from pptx.enum.shapes import MSO_SHAPE
+    from pptx.util import Pt
+    inset = width_pt / 2 * EMU_PER_PT
+    x, y, w, h = box
+    edges = (x + inset, y + inset, w - 2 * inset, h - 2 * inset)
+    shape = bare(slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, *(Emu(int(round(v))) for v in edges)))
+    shape.name = name
+    shape.fill.background()
+    shape.line.color.rgb = RGBColor.from_string(color)
+    shape.line.width = Pt(width_pt)
+    return shape
+
+
+def mark_panels(slide, it, box, k):
+    """Frame the panels a grid item asks for: `highlight` in the accent color, and the panels of the earlier
+    `numbers` in the muted chart color. The accent frame wins on a panel named twice, and is drawn last."""
+    if not it.get("_grid"):
+        return
+    marks = {p: (P["chart_muted"], 2.0) for p in it.get("_muted_panels", [])}
+    marks.update({p: (P["accent"], 3.0) for p in it.get("_panels", [])})
+    for panel, (color, width) in sorted(marks.items(), key=lambda m: m[1][0] == P["accent"]):
+        add_frame(slide, panel_box(box, it["_grid"], panel), color, width, f"Panel mark {k}.{panel}")
+
+
+def value_style(text, best):
+    """(run, size, numeric) for one panel's value: a number large in the theme's number font — the accent
+    color and larger on a highlighted panel — and a word ("reference") at the body size, muted."""
+    if re.match(r"\s*[-−+]?[\d.]", text):
+        family, bold, italic = THEME["fonts"]["number"]
+        return Run(text, bold=bold, italic=italic, color=P["accent"] if best else P["strong"], font=family), \
+            (72 if best else 60), True
+    return Run(text, color=P["muted"]), STYLE["min_font_size"], False
+
+
+def run_width(run, size):
+    return METRICS.width(run.text, size, run.bold, run.italic, run.font) * EMU_PER_PT
+
+
+def values_plan(it, width, what):
+    """How a lone grid item's `values` go on the slide: beside the panels for one or two columns, under
+    them for a single row. Returns (mode, room) — the width each side, or the height of the band below —
+    or None when the grid has no place for them."""
+    cols, rows = it["_grid"]
+    styles = [value_style(v, k + 1 in it.get("_panels", [])) for k, v in enumerate(it["_values"]) if v]
+    if not styles:
+        return None
+    if cols <= 2:
+        side = max(run_width(run, size) for run, size, _ in styles) + _in(0.1)
+        return "beside", min(max(side, _in(0.8)), width * 0.28)
+    if rows == 1:
+        return "under", max(size * LINE_FACTOR.get(run.font or BODY_FONT, 1.2) * EMU_PER_PT for run, size, _ in styles)
+    warn(f"{what}: values go beside a grid of one or two columns, or under a single row — left out")
+    return None
+
+
+def place_values(slide, it, box, plan, k=1):
+    """Each panel's value beside it (left of the left column, right of the right one) or under it."""
+    mode, room = plan
+    cols, rows = it["_grid"]
+    x, y, w, h = box
+    for panel, value in enumerate(it["_values"], 1):
+        if not value:
+            continue
+        run, size, _ = value_style(value, panel in it.get("_panels", []))
+        line_h = size * LINE_FACTOR.get(run.font or BODY_FONT, 1.2) * EMU_PER_PT
+        px, py, pw, ph = panel_box(box, it["_grid"], panel)
+        col = (panel - 1) % cols
+        if mode == "under":
+            vbox, algn = (px, y + h + _in(0.06), pw, line_h), "ctr"
+        elif cols == 2 and col == 0:
+            vbox, algn = (x - GAP - room, py + ph / 2 - line_h / 2, room, line_h), "r"
+        else:
+            vbox, algn = (x + w + GAP, py + ph / 2 - line_h / 2, room, line_h), "l"
+        write_box(slide, vbox, [Para([run], algn=algn, color=run.color)], size, f"Panel value {k}.{panel}", "ctr")
+
+
+def fill_numbers(slide, s, media, box, label):
+    """`numbers`: a result's before and after as big numbers down the left of the slide, the video or figure
+    that shows it on the right. The last number is the result — the accent color, larger, beside the theme's
+    mark; the panels the numbers name are framed in the same colors."""
+    x0, y0, x1, y1 = box
+    spec, it = s["numbers"], media[0]
+    items = spec["items"]
+    if len(media) > 1:
+        warn(f"{label}: numbers sit beside one video or figure — used the first, left out the rest")
+    if it.get("_grid"):
+        it["_muted_panels"] = [n["_panel"] for n in items[:-1] if n.get("_panel")]
+        it["_panels"] = list(it.get("_panels", [])) + ([items[-1]["_panel"]] if items[-1].get("_panel") else [])
+    media_w = int((x1 - x0) * 0.52)
+    add_media(slide, [it], (x1 - media_w, y0, media_w, y1 - y0), None, "middle", f"{label} media")
+
+    col_w = x1 - media_w - COL_GAP - x0
+    family, bold, italic = THEME["fonts"]["number"]
+    bar = THEME["mark"] == "bar"
+    indent = _in(0.28) if bar else 0
+    rows = []
+    for i, n in enumerate(items):
+        result = i == len(items) - 1
+        color = P["accent"] if result else P["chart_muted"]
+        size, ok = fit_one_line(n["value"], (family, bold, italic), int(col_w * 0.6), (80, 54) if result else (60, 40))
+        if not ok:
+            warn(f"{label}: the number {n['value']!r} is too wide even at {size}pt — keep it to a few characters")
+        run = Run(n["value"], bold=bold, italic=italic, color=color, font=family)
+        value_w = min(run_width(run, size) + _in(0.3), col_w * 0.6)
+        value_h = size * LINE_FACTOR.get(family, 1.2) * EMU_PER_PT
+        paras = []
+        if n.get("text"):
+            paras.append(Para(inline_runs(n["text"], bold=result, color=P["strong"] if result else P["muted"]),
+                              color=P["strong"] if result else P["muted"]))
+        if n.get("detail"):
+            paras.append(Para(inline_runs(n["detail"], color=P["muted"]), color=P["muted"]))
+        text_x = x0 + (indent if result else 0) + value_w
+        text_w = x0 + col_w - text_x
+        stacked = text_w < _in(1.8)                       # a long number pushes its words under it
+        if stacked:
+            text_x, text_w = x0 + (indent if result else 0), col_w - (indent if result else 0)
+        tsize, fits = fit_lines(paras, text_w, font_sizes(24), 2) if paras else (0, True)
+        if not fits:
+            warn(f"{label}: the words beside {n['value']!r} run past two lines — shorten them")
+        text_h = stack_height(paras, text_w, tsize) if paras else 0
+        row_h = value_h + text_h if stacked else max(value_h, text_h)
+        rows.append((result, run, size, value_w, value_h, paras, tsize, text_x, text_w, text_h, stacked, row_h))
+
+    head = [Para(inline_runs(spec["label"], color=P["muted"]), color=P["muted"])] if spec.get("label") else []
+    hsize = fit_lines(head, col_w, font_sizes(24), 1)[0] if head else 0
+    head_h = stack_height(head, col_w, hsize) + _in(0.3) if head else 0
+    gap = _in(0.35)
+    total = head_h + sum(r[-1] for r in rows) + gap * (len(rows) - 1)
+    y = y0 + max(0, (y1 - y0 - total) / 2)
+    if head:
+        write_box(slide, (x0, y, col_w, head_h), head, hsize, "Numbers label")
+        y += head_h
+    for k, (result, run, size, value_w, value_h, paras, tsize, text_x, text_w, text_h, stacked, row_h) in \
+            enumerate(rows, 1):
+        vx = x0 + (indent if result else 0)
+        write_box(slide, (vx, y, value_w, value_h), [Para([run], color=run.color)], size, f"Number {k}", "ctr")
+        if paras:
+            ty = y + value_h if stacked else y + (row_h - text_h) / 2
+            write_box(slide, (text_x, ty, text_w, text_h + _in(0.05)), paras, tsize, f"Number text {k}")
+        if result and bar:
+            add_bar(slide, (x0, y + row_h * 0.08, _in(0.08), row_h * 0.84), P["mark"], "Numbers mark")
+        elif result:
+            add_bar(slide, (x0, y - _in(0.16), _in(1.0), _in(0.035)), P["mark"], "Numbers mark")
+        y += row_h + gap
 
 
 def add_media_item(slide, it, box, k):
@@ -1608,6 +1776,10 @@ def fill_content(slide, s, base_dir, work):
         layout = "auto"
 
     y0 = place_subtitle(slide, s, x0, y0, x1 - x0, label)
+    if s.get("numbers") and media:
+        fill_numbers(slide, s, media, (x0, y0, x1, y1), label)
+        place_footnote(slide, s, label)
+        return
     bullets = bullet_paras(s.get("bullets", []))
     if layout == "fit":
         # Figure-led slide: a wide figure gets the full width under the text, a squarer one sits beside it.
@@ -1648,8 +1820,22 @@ def fill_content(slide, s, base_dir, work):
         if y1 - y0 < 0.8 * EMU_PER_IN:
             raise SystemExit(f"{label}: no room left for media — move text or the table to another slide")
         only_media = not s.get("bullets") and not table
-        add_media(slide, media, (x0, y0, x1 - x0, y1 - y0), s.get("media_rows"),
-                  "middle" if only_media else "top", f"{label} media")
+        box = (x0, y0, x1 - x0, y1 - y0)
+        lone = media[0] if len(media) == 1 and only_media and media[0].get("_values") else None
+        plan = values_plan(lone, x1 - x0, f"{label} media") if lone else None
+        if plan and plan[0] == "beside":           # room for the numbers on both sides keeps the item centered
+            box = (x0 + plan[1] + GAP, y0, x1 - x0 - 2 * (plan[1] + GAP), y1 - y0)
+        elif plan:                                 # a band for them under the panels, above the caption
+            box = (x0, y0, x1 - x0, y1 - y0 - plan[1] - _in(0.06))
+        _, placed = add_media(slide, media, box, s.get("media_rows"), "middle" if only_media else "top",
+                              f"{label} media")
+        if plan:
+            it, item_box = placed[0][0], placed[0][1]
+            if plan[0] == "under":
+                for shape in slide.shapes:
+                    if shape.name == "Caption 1":
+                        shape.top = Emu(int(shape.top + plan[1] + _in(0.06)))
+            place_values(slide, it, item_box, plan)
 
     if s.get("valign") == "middle":
         center_vertically([sh for sh in slide.shapes if sh.shape_id != slide.shapes.title.shape_id])
@@ -1726,6 +1912,11 @@ def slide_texts(s):
             chart = m.get("chart") or {}
             texts += [m.get("caption")] + [str(c) for c in chart.get("categories", [])]
             texts += [ser.get("name") for ser in chart.get("series", [])]
+            texts += [str(v) for v in m.get("values", []) if v] if isinstance(m.get("values"), list) else []
+    numbers = s.get("numbers") if isinstance(s.get("numbers"), dict) else {}
+    texts += [numbers.get("label")]
+    for item in numbers.get("items", []) if isinstance(numbers.get("items"), list) else []:
+        texts += [str(item.get(k)) for k in ("value", "text", "detail") if item.get(k)] if isinstance(item, dict) else []
     return [t for t in texts if t]
 
 
@@ -1735,6 +1926,47 @@ LABEL_RE = re.compile(r"^\*\*[^*]{1,30}:\*\*\s*")
 def words(text):
     """Words in a line, not counting a leading **Label:** such as a paper slide's **Problem:**."""
     return len(LABEL_RE.sub("", text).replace("**", "").split())
+
+
+# Phrases that narrate the slide instead of saying its point.
+FILLER_RE = re.compile(r"\b(?:we can see|as (?:we can see|shown in|shown on|shown by|seen in)|it is worth noting|"
+                       r"it should be noted|(?:the )?key takeaway(?: here)? is|this slide (?:shows|presents))\b",
+                       re.IGNORECASE)
+# Stock phrases that make speaker notes sound generated (after nature-paper2ppt's list for Chinese talks).
+STOCK_NOTES_RE = re.compile(r"一句话总结|最有价值的后续方向|值得注意的是|总的来说|从某种意义上|提供了新的视角|具有重要意义|"
+                            r"未来可以进一步探索|不是[^。！？；\n]{1,24}而是|不只是[^。！？；\n]{1,24}更是")
+WRITTEN = ("content", "statement", "columns", "timeline")
+
+
+def counted(s):
+    """Whether a slide's words count against the house budget: the content, statement, columns and timeline
+    slides of the spec. The paper-reading and comparison slides the builder makes, the cover, sections,
+    agenda, Done and Todo have limits of their own."""
+    return s["type"] in WRITTEN and not s.get("_from")
+
+
+def slide_prose(s, footnote=True):
+    """The text the audience reads on a slide: title, subtitle, bullets, captions, the statement, column and
+    timeline text, the footnote. Table cells and chart labels are data, and the notes stay off the slide."""
+    texts = [s.get(k) for k in ("title", "subtitle", "text", "number", "detail")]
+    texts += [s.get("footnote")] if footnote else []
+    texts += [normalize_item(b)["text"] for b in s.get("bullets", [])]
+    for m in s.get("media", []):
+        if isinstance(m, dict):
+            texts += [m.get("caption")] + list(m.get("_values", []))
+    numbers = s.get("numbers") if isinstance(s.get("numbers"), dict) else {}
+    texts += [numbers.get("label")]
+    for item in numbers.get("items", []):
+        texts += [item.get(k) for k in ("value", "text", "detail")] if isinstance(item, dict) else []
+    for col in s.get("columns", []):
+        texts += [col.get("heading")] + [str(t) for t in as_list(col.get("text"))]
+    for point in s.get("points", []):
+        texts += [point.get("label"), point.get("text")]
+    return [str(t) for t in texts if t]
+
+
+def slide_words(s):
+    return sum(len(t.replace("**", "").split()) for t in slide_prose(s))
 
 
 # Keys each spec object may have. Anything else is most likely a typo, which would otherwise be
@@ -1749,7 +1981,9 @@ SPEC_KEYS = {
     "done": {"type", "title", "projects", "notes"},
     "todo": {"type", "title", "projects", "notes"},
     "content": {"type", "title", "subtitle", "bullets", "table", "media", "media_rows", "layout", "text_width",
-                "footnote", "text_only", "valign", "notes"},
+                "footnote", "text_only", "valign", "notes", "numbers"},
+    "numbers": {"label", "items"},
+    "number": {"value", "text", "detail", "panel"},
     "statement": {"type", "title", "text", "number", "detail", "footnote", "notes"},
     "columns": {"type", "title", "subtitle", "columns", "footnote", "notes"},
     "column": {"heading", "text", "media"},
@@ -1765,7 +1999,7 @@ SPEC_KEYS = {
     "methods": {"header", "rows", "col_widths", "align", "font_size", "takeaway"},
     "results": {"header", "rows", "col_widths", "align", "font_size", "takeaway", "note", "better"},
     "cell": {"text", "bold", "color", "fill"},
-    "media": {"path", "caption", "poster", "page", "chart", "aspect", "focus", "crop"},
+    "media": {"path", "caption", "poster", "page", "chart", "aspect", "focus", "crop", "grid", "highlight", "values"},
     "chart": {"type", "categories", "series", "number_format", "labels", "highlight", "y_min", "y_max"},
     "series": {"name", "values", "color"},
 }
@@ -1774,12 +2008,12 @@ SLIDE_TYPES = ("cover", "agenda", "section", "done", "todo", "content", "stateme
 SPEC_VALUES = {"layout": {"auto", "text-left", "text-right", "stack", "fit", "split", "split-left"},
                "valign": {"top", "middle"}}
 LIST_KEYS = {"bullets", "media", "extra_lines", "projects", "items", "highlight", "categories", "header", "lines",
-             "columns", "points"}
+             "columns", "points", "values"}
 # Keys that hold one line of text: a number there is used as text (a year as a series name), a list is
 # joined into one line.
 TEXT_KEYS = {"title", "subtitle", "name", "label", "text", "status", "caption", "footnote", "date", "theme",
              "takeaway", "note", "full_title", "venue", "problem", "approach", "pipeline_caption", "heading",
-             "detail", "number"}
+             "detail", "number", "value"}
 HEX_RE = re.compile(r"[0-9A-Fa-f]{6}")
 
 
@@ -1867,6 +2101,11 @@ def check_spec(spec):
         for b in s.get("bullets", []):
             check_keys(b, "bullet", where)
             need(b, ("text",), f"{where}: every bullet needs a \"text\"")
+        if kind == "content" and isinstance(s.get("numbers"), dict):
+            check_keys(s["numbers"], "numbers", f"{where} numbers")
+            for item in s["numbers"].get("items", []):
+                check_keys(item, "number", f"{where} numbers")
+                need(item, ("value",), f"{where}: every entry of \"numbers\" needs a \"value\" — the number itself")
         tables = [("table", s.get("table"))] if kind == "content" else []
         tables += [(k, s.get(k)) for k in ("methods", "results")] if kind == "compare" else []
         for table_kind, t in tables:
@@ -1891,9 +2130,100 @@ def check_spec(spec):
                 need(ser, ("values",), f"{where}: every chart series needs \"values\"")
 
 
+def parse_grid(value):
+    """(columns, rows) from [2, 2], "2x2" or "2×2"; None if it isn't a grid of 2 to 36 panels."""
+    if isinstance(value, str):
+        hit = re.fullmatch(r"\s*(\d+)\s*[x×*]\s*(\d+)\s*", value)
+        value = [int(hit.group(1)), int(hit.group(2))] if hit else None
+    if (isinstance(value, (list, tuple)) and len(value) == 2
+            and all(isinstance(v, int) and not isinstance(v, bool) for v in value)
+            and 1 <= value[0] <= 6 and 1 <= value[1] <= 6 and value[0] * value[1] >= 2):
+        return tuple(value)
+    return None
+
+
+def panel_number(value):
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value)
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def lint_panels(s, where):
+    """Check a content slide's panel keys — a media item's `grid`, `highlight` and `values`, and the slide's
+    `numbers` — and keep what the layout can use: _grid, _panels and _values on the item, _panel on a number."""
+    media = [m for m in s.get("media", []) if isinstance(m, dict)]
+    for m in media:
+        if not any(k in m for k in ("grid", "highlight", "values")):
+            continue
+        if "chart" in m:
+            warn(f"{where}: grid, highlight and values are for a video or figure made of panels — a chart takes "
+                 "\"highlight\" inside \"chart\"; ignored")
+            continue
+        grid = parse_grid(m.get("grid"))
+        if not grid:
+            warn(f"{where}: " + (f"grid {m['grid']!r} is not [columns, rows] like [2, 2]" if "grid" in m else
+                                 "\"highlight\" and \"values\" need \"grid\": [columns, rows], the video's panels")
+                 + " — panels ignored")
+            continue
+        n = grid[0] * grid[1]
+        raw = m.get("highlight")
+        raw = [] if raw is None else raw if isinstance(raw, list) else [raw]
+        panels = [panel_number(p) for p in raw]
+        bad = [p for p, q in zip(raw, panels) if q is None or not 1 <= q <= n]
+        if bad:
+            warn(f"{where}: highlight {bad} is not a panel number 1–{n} (left to right, top to bottom) — left out")
+        values = [("" if v is None else str(v)) for v in m.get("values", [])]
+        if values and len(values) != n:
+            warn(f"{where}: {len(values)} values for {n} panels — give one per panel, \"\" for none")
+            values = (values + [""] * n)[:n]
+        m["_grid"], m["_panels"], m["_values"] = grid, [p for p in panels if p and 1 <= p <= n], values
+    if s.get("layout") in ("split", "split-left") and any(m.get("_grid") for m in media):
+        warn(f"{where}: panel marks and values don't work in the {s['layout']} layout — ignored")
+        for m in media:
+            m.pop("_grid", None)
+    if any(m.get("_values") for m in media) and (len(media) > 1 or s.get("bullets") or s.get("table")):
+        warn(f"{where}: values go beside the panels only when the video or figure is alone on the slide — left out")
+        for m in media:
+            m["_values"] = []
+
+    numbers = s.get("numbers")
+    if numbers is None:
+        return
+    items = numbers.get("items") if isinstance(numbers, dict) else None
+    items = [i for i in (items or []) if isinstance(i, dict) and i.get("value")]
+    if not items or not s.get("media"):
+        warn(f"{where}: \"numbers\" needs " + ("\"items\", each with a \"value\"" if not items else
+                                              "the video or figure that shows them — or make it a statement")
+             + " — left out")
+        s.pop("numbers")
+        return
+    if len(items) > 3:
+        warn(f"{where}: {len(items)} numbers — keep the before and after (three at most); kept the first three")
+        items = items[:3]
+    if s.get("bullets") or s.get("table"):
+        warn(f"{where}: numbers take the place of bullets and tables — they are left out on this slide")
+    grid = media[0].get("_grid") if media else None
+    for item in items:
+        if item.get("text") and words(str(item["text"])) > 6:
+            warn(f"{where}: the words beside {item['value']!r} run over 6 words — name the condition, no more")
+        if item.get("detail") and words(str(item["detail"])) > STYLE["max_words_per_item"]:
+            warn(f"{where}: the detail under {item['value']!r} runs over {STYLE['max_words_per_item']} words")
+        if "panel" in item:
+            panel = panel_number(item["panel"])
+            if grid and panel and 1 <= panel <= grid[0] * grid[1]:
+                item["_panel"] = panel
+            else:
+                warn(f"{where}: the number {item['value']!r} points at panel {item['panel']!r}, which the first "
+                     "video's \"grid\" doesn't have — no frame drawn")
+    s["numbers"] = {**numbers, "items": items}
+
+
 def lint(s):
-    """House-style checks: English only, a few short key sentences, a visual on every content slide."""
+    """House-style checks: English only, few words, the point in the subtitle, a visual on every content slide."""
     where = f"slide '{s.get('title') or 'Group Meeting'}'"
+    written = not s.get("_from")              # made from the spec, not expanded from a paper or a comparison
+    if s["type"] == "content":
+        lint_panels(s, where)
     if STYLE["language"] == "en":
         foreign = next((t for t in slide_texts(s) if CJK_RE.search(t)), None)
         if foreign:
@@ -1907,8 +2237,26 @@ def lint(s):
         long = next((b for b in bullets if words(b) > limit), None)
         if long:
             warn(f"{where}: bullet over {limit} words — {long!r}")
+        if bullets and s.get("media") and written and not s.get("numbers"):
+            warn(f"{where}: {len(bullets)} bullet{'s' if len(bullets) > 1 else ''} beside a figure, video or chart — "
+                 "the subtitle says the point and a caption where to look; move the rest to the notes")
         if not s.get("media") and not s.get("text_only"):
             warn(f"{where}: no figure, demo video or chart — add a visual (or set \"text_only\": true)")
+        cap_limit = STYLE["max_words_per_caption"]
+        long = next((m["caption"] for m in s.get("media", [])
+                     if isinstance(m, dict) and m.get("caption") and words(str(m["caption"])) > cap_limit), None)
+        if long:
+            warn(f"{where}: caption over {cap_limit} words — {long!r}: say where to look, put the rest in the notes")
+    if s["type"] in ("content", "columns", "timeline") and written and not s.get("subtitle"):
+        warn(f"{where}: no subtitle — give the slide's takeaway as one plain sentence")
+    filler = next((hit.group(0) for t in slide_prose(s, footnote=False) for hit in [FILLER_RE.search(t)] if hit), None)
+    if filler:
+        warn(f"{where}: {filler!r} narrates the slide — delete it and say the point itself")
+    notes = s.get("notes")
+    stock = STOCK_NOTES_RE.search("\n".join(map(str, notes)) if isinstance(notes, list) else str(notes or ""))
+    if stock:
+        warn(f"{where}: the notes use the stock phrase {stock.group(0)!r} — say the method, number or figure it is "
+             "about instead")
     if s["type"] == "section" and s.get("subtitle") and words(s["subtitle"]) > limit:
         warn(f"{where}: section subtitle over {limit} words — one short line on what this part covers")
     if s["type"] == "statement":
@@ -1916,29 +2264,38 @@ def lint(s):
             warn(f"{where}: statement over {limit} words — one sentence people remember")
         if s.get("detail") and words(s["detail"]) > limit:
             warn(f"{where}: detail over {limit} words — one supporting line")
-    if s["type"] == "columns":
-        for col in s["columns"]:
-            lines = as_list(col.get("text"))
-            if len(lines) > 2:
-                warn(f"{where}: a column has {len(lines)} lines — keep it to a heading and two lines")
-            long = next((t for t in lines if words(str(t)) > limit), None)
-            if long:
-                warn(f"{where}: column line over {limit} words — {long!r}")
-            if col.get("heading") and words(col["heading"]) > 6:
-                warn(f"{where}: column heading over 6 words — {col['heading']!r}")
+    item_limit = STYLE["max_words_per_item"]
+    if s["type"] == "columns" and written:   # a paper's Novelty | Limitations slide is checked in paper_slides
+        lines = [as_list(col.get("text")) for col in s["columns"]]
+        longer = sum(len(col) > 1 for col in lines)
+        if longer:
+            warn(f"{where}: {longer} column{'s have' if longer > 1 else ' has'} more than one line — keep each "
+                 "column to a heading and one line")
+        long = next((t for col in lines for t in col if words(str(t)) > item_limit), None)
+        if long:
+            warn(f"{where}: column line over {item_limit} words — {long!r}")
+        heading = next((c["heading"] for c in s["columns"] if c.get("heading") and words(c["heading"]) > 6), None)
+        if heading:
+            warn(f"{where}: column heading over 6 words — {heading!r}")
+        if any(isinstance(c.get("media"), dict) and any(k in c["media"] for k in ("grid", "highlight", "values"))
+               for c in s["columns"]):
+            warn(f"{where}: grid, highlight and values work on content slides, not in columns — ignored")
     if s["type"] == "timeline":
-        item_limit = STYLE["max_words_per_item"]
         long = next((p["text"] for p in s["points"] if p.get("text") and words(p["text"]) > item_limit), None)
         if long:
             warn(f"{where}: step text over {item_limit} words — {long!r}")
     if s["type"] == "agenda" and len(s["items"]) > 6:
         warn(f"{where}: {len(s['items'])} parts — an agenda reads best with six or fewer")
     for proj in s.get("projects", []):
-        item_limit = STYLE["max_words_per_item"]
         long = next((normalize_item(i)["text"] for i in proj.get("items", [])
                      if words(normalize_item(i)["text"]) > item_limit), None)
         if long:
             warn(f"{where}: item over {item_limit} words — {long!r}")
+    if counted(s):
+        s["_words"] = n = slide_words(s)
+        if n > STYLE["max_words_per_slide"]:
+            warn(f"{where}: {n} words on the slide — the house ceiling is {STYLE['max_words_per_slide']}; let the "
+                 "visual and the subtitle carry it, move explanations to the notes, or split the slide")
 
 
 def as_list(value):
@@ -1968,7 +2325,7 @@ def paper_slides(s):
 
     bullets = [f"**{label}:** {text}" for label, text in (("Problem", problem), ("Approach", approach)) if text]
     first = {"type": "content", "title": f"Paper reading: {name}", "bullets": bullets, "layout": "fit",
-             "text_only": not figure}
+             "text_only": not figure, "_from": "paper"}
     if s.get("full_title"):
         first["subtitle"] = s["full_title"]
     if figure:
@@ -1990,7 +2347,7 @@ def paper_slides(s):
         long = next((t for _, items in columns for t in items if words(t) > STYLE["max_words_per_bullet"]), None)
         if long:
             warn(f"{where}: point over {STYLE['max_words_per_bullet']} words — {long!r}")
-        second = {"type": "columns", "title": f"{name}: novelty and limits",
+        second = {"type": "columns", "title": f"{name}: novelty and limits", "_from": "paper",
                   "columns": [{"heading": head, "text": [str(t) for t in items]} for head, items in columns]}
         if s.get("takeaway"):
             second["subtitle"] = s["takeaway"]
@@ -2075,7 +2432,8 @@ def compare_slides(s):
         table = {k: t[k] for k in ("header", "col_widths", "font_size") if k in t}
         table["rows"] = bold_best(t) if kind == "results" else t["rows"]
         table["align"] = t.get("align") or (["left"] * ncols if kind == "methods" else ["left"] + ["center"] * (ncols - 1))
-        slide = {"type": "content", "title": f"Compare: {theme} — {kind}", "table": table, "text_only": True}
+        slide = {"type": "content", "title": f"Compare: {theme} — {kind}", "table": table, "text_only": True,
+                 "_from": "compare"}
         if t.get("takeaway"):
             slide["subtitle"] = t["takeaway"]
         if kind == "results":
@@ -2099,24 +2457,31 @@ def expand_slides(spec, cfg):
         slides.insert(0, {"type": "cover"})
     sections = [str(s["title"]) for s in slides if s.get("type") == "section" and s.get("title")]
     planned = []
+    agenda_items = []                   # the last agenda's parts, for an agenda repeated without its own
     for s in slides:
         kind = s.get("type", "content")
         if kind not in SLIDE_TYPES:
             raise SystemExit(f"unknown slide type {kind!r}; use {', '.join(SLIDE_TYPES)}")
         s["type"] = kind
         if kind == "closing":
-            s.setdefault("title", "Thank you")
+            if not s.get("title"):
+                warn("closing slide has no title — make it the talk's one takeaway, which stays up during the "
+                     "questions; used 'Thank you'")
+                s["title"] = "Thank you"
+            elif re.fullmatch(r"(thanks?\b.*|questions\W*|q\s*&\s*a\W*)", str(s["title"]).strip(), re.IGNORECASE):
+                warn(f"closing slide '{s['title']}' says nothing the audience keeps — make the title the talk's one "
+                     "takeaway, unless the user asked for this")
             lint(s)
             planned.append(s)
             continue
         if kind == "agenda":
             s.setdefault("title", "Outline")
             items = [str(t.get("title") or t.get("text") or "") if isinstance(t, dict) else str(t)
-                     for t in as_list(s.get("items"))] or sections
+                     for t in as_list(s.get("items"))] or agenda_items or sections
             if not items:
                 warn(f"agenda '{s['title']}' has no \"items\" and the deck has no section slides to list — left out")
                 continue
-            s["items"] = items
+            s["items"] = agenda_items = items
             current = s.get("current")
             if current is not None:
                 if isinstance(current, int) and not isinstance(current, bool):
@@ -2184,7 +2549,70 @@ def expand_slides(spec, cfg):
                 s["points"] = points
             lint(s)
             planned.append(s)
+    agendas = [s for s in planned if s["type"] == "agenda"]
+    if len(agendas) == 1 and agendas[0].get("_current") is None:
+        warn(f"agenda '{agendas[0]['title']}': one outline only lists what is coming — leave it out, or open each "
+             "part with it, \"current\" set to that part, in place of the section slides")
+    counts = [s["_words"] for s in planned if "_words" in s]
+    if len(counts) >= 3 and statistics.median(counts) > STYLE["median_words_per_slide"]:
+        warn(f"the content slides carry a median of {statistics.median(counts):g} words — the house target is "
+             f"{STYLE['median_words_per_slide']}; start with bullets beside figures and long subtitles")
     return planned
+
+
+def describe(s):
+    """What a slide shows, in a few words, for the outline."""
+    kind = s["type"]
+    if kind == "content":
+        shown = ["numbers"] if s.get("numbers") else []
+        for m in s.get("media", []):
+            if isinstance(m, dict) and m.get("chart"):
+                shown.append("chart")
+            else:
+                path = m.get("path") if isinstance(m, dict) else m
+                what = "video" if Path(str(path)).suffix.lower() in VIDEO_MIME else "figure"
+                grid = m.get("_grid") if isinstance(m, dict) else None
+                if grid:
+                    what += f" {grid[0]}×{grid[1]}" + (" with values" if m.get("_values") else "")
+                    what += f", panel {', '.join(map(str, m['_panels']))} marked" if m.get("_panels") else ""
+                shown.append(what)
+        shown += ["table"] if s.get("table") else []
+        n = len(s.get("bullets", []))
+        shown += [f"{n} bullet{'s' if n > 1 else ''}"] if n else []
+        return " + ".join(shown) or "text"
+    if kind == "columns":
+        return f"{len(s['columns'])} columns"
+    if kind == "timeline":
+        return f"{len(s['points'])} steps"
+    if kind in ("done", "todo"):
+        n = sum(len(p.get("items", [])) for p in s.get("projects", []) if isinstance(p, dict))
+        return f"{n} item{'s' if n != 1 else ''}"
+    if kind == "agenda":
+        current = s.get("_current")
+        return f"part {current + 1} of {len(s['items'])}" if current is not None else f"{len(s['items'])} parts"
+    return ""
+
+
+def print_outline(planned):
+    """The deck as the audience reads it: each slide's form, title and message line, with its word count.
+    Read top to bottom, the message lines should tell the talk's story."""
+    for i, s in enumerate(planned, 1):
+        what = ", ".join(t for t in (s["type"], describe(s), f"{s['_words']} words" if "_words" in s else "") if t)
+        print(f"  {i:2d}. [{what}] {s.get('title') or 'Group Meeting'}")
+        message = s.get("subtitle") or (" — ".join(str(s[k]) for k in ("number", "text") if s.get(k))
+                                        if s["type"] == "statement" else None)
+        if message:
+            print(f"        {message}")
+
+
+def words_summary(planned):
+    counts = [(i, s["_words"]) for i, s in enumerate(planned, 1) if "_words" in s]
+    if not counts:
+        return None
+    most = max(counts, key=lambda c: c[1])
+    return (f"Words on the {len(counts)} content slides: median {statistics.median(c for _, c in counts):g} "
+            f"(house target {STYLE['median_words_per_slide']}), most {most[1]} on slide {most[0]} "
+            f"(ceiling {STYLE['max_words_per_slide']})")
 
 
 def template_samples():
@@ -2272,6 +2700,8 @@ def main():
     ap.add_argument("-o", "--output", help="output .pptx (default: spec 'output', else <output_root>/<YYMMDD>GroupMeeting/)")
     ap.add_argument("--theme", help=f"build in this theme ({', '.join(THEMES)}), whatever the spec and config say")
     ap.add_argument("--no-validate", action="store_true", help="skip the final check of the written deck")
+    ap.add_argument("--outline", action="store_true",
+                    help="print every slide's form, title, message line and word count, and the warnings; build nothing")
     deck_structure.add_arguments(ap)
     args = ap.parse_args()
 
@@ -2282,6 +2712,13 @@ def main():
     STYLE.update(cfg.get("style", {}))
     use_theme(args.theme or spec.get("theme") or cfg.get("theme") or DEFAULT_THEME)
     planned = expand_slides(spec, cfg)
+    if args.outline:
+        print(f"Outline of {spec_path.name}: {len(planned)} slides, {THEME_NAME} theme (nothing built)")
+        print_outline(planned)
+        summary = words_summary(planned)
+        if summary:
+            print(summary)
+        return
     cover = next((s for s in planned if s["type"] == "cover"), None)
 
     if args.output:
@@ -2318,7 +2755,10 @@ def main():
                     fill_section(slide, s)
                     label = s["title"]
                 elif kind in ("done", "todo", "agenda"):
-                    label = None              # these frame the whole deck rather than belong to one part
+                    # These frame the whole deck rather than belong to one part, except an agenda with
+                    # "current", which opens that part as a section slide would.
+                    current = s.get("_current") if kind == "agenda" else None
+                    label = s["items"][current] if current is not None else None
                     fill_agenda(slide, s) if kind == "agenda" else fill_progress(slide, s, kind)
                 elif kind == "statement":
                     fill_statement(slide, s)
@@ -2350,7 +2790,11 @@ def main():
         print(f"Did not write {out}: the built deck failed the check below{kept}")
     for i, s in enumerate(planned, 1):
         layout = f", {s['layout']}" if s["type"] == "content" and s.get("layout", "auto") != "auto" else ""
-        print(f"  {i:2d}. [{s['type']}{layout}] {s.get('title') or 'Group Meeting'}")
+        count = f", {s['_words']} words" if "_words" in s else ""
+        print(f"  {i:2d}. [{s['type']}{layout}{count}] {s.get('title') or 'Group Meeting'}")
+    summary = words_summary(planned)
+    if summary:
+        print(summary)
     show_warnings()
     if report:
         print(report)

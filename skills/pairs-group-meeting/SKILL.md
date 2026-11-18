@@ -114,21 +114,41 @@ each message (fields in `references/spec-format.md`):
 - **Sections.** When the deck covers two or more projects, or has a paper-reading part, open each
   part with a `section` slide — the project's name and one line on it (`Paper reading` for the
   papers). Every slide after it shows that name in its footer. A one-project deck needs none.
-- **Outline.** With three or more parts, an `agenda` after the cover lists them (it reads the
-  section titles itself). In a long formal talk, repeat it before each part with `current` set.
+- **No outline page.** An `agenda` that only lists what is coming says nothing, so a group meeting
+  has none. In a formal talk of three or more parts you may open each part with the agenda instead
+  of a section slide, `current` set to that part, so the audience sees where they are. Use one or
+  the other, not both.
 - **The key result.** The one or two results the audience must remember get a `statement`: the
   sentence large, with the number it is about (`36%`) when there is one. Not for every result.
 - **Parallel points.** Contributions, challenges, the parts of a method or one result under two to
-  four conditions: a `columns` slide (heading + a line, optionally a small chart or image each)
-  rather than bullets.
-- **Photos and demos.** A setup or robot photo, or a demo video with two lines on what to watch:
-  `"layout": "split"` (or `split-left`) — the picture fills half the slide out to its edge.
-- **Plans with dates.** Milestones toward a deadline, or the steps of a pipeline without a figure: a
-  `timeline` (done / now / next). The usual Todo list stays a `todo`.
+  four conditions: a `columns` slide (a heading and one line each, optionally a small chart or
+  image) rather than bullets.
+- **A result and its demo.** When a chart and a demo video show the same comparison — a 2×2
+  video of four conditions, three views side by side — they go on one slide: the number says how
+  much, the video what it looks like. Give the video its `grid` and mark the condition the slide is
+  about in the accent color everywhere it appears. Pick one of three ways
+  (`references/spec-format.md` → A result and its demo):
+  - **Chart beside the demo** — the video and the chart as two media; the same condition is
+    `highlight`ed in both: its panel framed, its bar gold. For several conditions, or a rate the
+    one clip can't show.
+  - **Each panel's number beside it** — the video alone with `values`, one number per panel and
+    a caption saying what they are. When every panel has one number.
+  - **Before and after** — `numbers` on the left (the old result muted, the new one large in gold),
+    the video on the right with both panels framed. When the story is one jump.
+- **Photos and demos.** A setup or robot photo, or a demo video: `"layout": "split"` (or
+  `split-left`) — the picture fills half the slide out to its edge, beside the subtitle and a
+  caption on what to watch.
+- **Plans with dates.** Milestones toward a deadline: a `timeline` (done / now / next). The usual
+  Todo list stays a `todo`. A pipeline or method is shown with its figure — ask the user for it —
+  never spelled out as a timeline of text.
+- **The user's own paper.** When they present the story of their own paper or draft, give it two
+  slides led by the paper's own figures (Fig. 1 for the problem, the method figure for the
+  approach) and put the argument in the notes — not a slide per paragraph of the introduction.
 - **Cover photo.** `paper` covers take an `image` — the robot, the setup, a demo frame. Use one the
   user gave you or ask whether they have one; never use a stock picture.
-- **Formal talks** (`paper`): the talk's own `title` on the cover with the event in `extra_lines`, an
-  `agenda`, sections, and a `closing` slide at the end.
+- **Formal talks** (`paper`): the talk's own `title` on the cover with the event in `extra_lines`,
+  sections (or the agenda, as above) opening the parts, and a `closing` slide whose title is the
+  talk's one takeaway — it stays up during the questions — rather than a bare "Thank you".
 
 Every content page is white in both looks; variety comes from these forms, not from page colors.
 
@@ -159,20 +179,33 @@ the rest.
 - **Body text is at least 22pt** (`min_font_size`). The builder never shrinks text below it; when
   something doesn't fit it warns instead — then cut words or split the slide, never shrink. Only
   titles (36pt) and the small source/citation footnote are outside this rule.
-- **Few words, key sentences — but self-explanatory.** Someone who missed the talk should still
-  get each slide:
-  - `subtitle` = the takeaway as one plain sentence: "Fusion cuts occluded error by 36%".
-  - At most **3 bullets** (`max_bullets_per_slide`), each one short line of **≤ 14 words**
-    (`max_words_per_bullet`), saying *why* or *how* — not repeating the figure.
-  - No paragraphs, no filler ("We can see that…", "As shown in the figure…").
-- **Show it.** Every results slide carries a figure, demo video or chart; prefer two visuals and two
-  bullets over one visual and four bullets.
+- **The slide shows; the speaker explains.** A group meeting is a live talk: the slide carries the
+  claim and its evidence, and the reasoning is said aloud, so it goes into the speaker `notes`.
+  - `subtitle` = the slide's takeaway as one plain sentence: "Fusion cuts occluded error by 36%".
+    Read top to bottom, the subtitles alone tell the talk's story, so someone who missed it still
+    gets it from them and the figures. Every content, columns and timeline slide has one.
+  - **A slide with a figure, chart or video has no bullets**: the title, the subtitle, the visual,
+    and at most a caption on where to look. What you would say about it goes into the notes.
+  - Bullets are for parallel points on a slide without a visual: at most **3**
+    (`max_bullets_per_slide`), each one short line of **≤ 14 words** (`max_words_per_bullet`).
+  - **About 25 words a slide, never more than 35** (`median_words_per_slide`,
+    `max_words_per_slide`), counting everything the audience reads: title, subtitle, bullets,
+    captions, statement, column and timeline text, footnote. The cover, sections, Done, Todo and
+    the paper-reading slides keep their own limits.
+  - No paragraphs, no filler ("We can see that…", "As shown in the figure…", "The key takeaway
+    is…").
+- **Notes on every slide**: what to say there, in the presenter's language — 中文 when they write
+  in Chinese; only the slides themselves are English. Start with 【这页讲】 and the slide's point in
+  one sentence, then the explanation, the numbers behind it, and any question for the group. Name
+  the method, number or figure; no stock phrases (一句话总结, 值得注意的是, 不是……而是……).
+- **Show it.** Every results slide carries a figure, demo video or chart; when one visual isn't
+  enough, add a second visual, not bullets.
   - Numbers → a native `chart` (bar / line, values labeled, the winner highlighted) rather than a
     table; keep tables for at most ~4 rows of exact values.
   - Demos → embedded video with a caption saying what to watch for: "Watch the index finger during
     the grasp".
-  - Figure captions (≤ 8 words, also 22pt) say what to look at or what the axes are — never repeat
-    the title. Skip them when the title already says it.
+  - Figure captions (≤ 8 words, `max_words_per_caption`, also 22pt) say what to look at or what
+    the axes are — never repeat the title. Skip them when the subtitle already says it.
 - **Light slides.** One message per slide. If a slide needs more than 3 bullets, or more than two
   visuals plus text, split it into two slides.
 - **Done/Todo items**: start with a verb, ≤ 10 words (`max_words_per_item`), one line each; `**bold**` one key number if
@@ -203,16 +236,15 @@ built before — read it and edit it rather than starting over, so nothing they 
      {"text": "Fusion model training", "status": "on-going"}]}]},
   {"type": "section", "title": "Vision-EMG Hand Pose", "subtitle": "Muscle signals fill in occluded joints"},
   {"type": "content", "title": "Occlusion results", "subtitle": "Fusion cuts occluded error by 36%",
-   "bullets": ["Biggest gain where vision fails", "Non-occluded accuracy also improves"],
    "media": [{"chart": {"type": "bar", "categories": ["Occluded", "Non-occluded"],
                         "series": [{"name": "Vision only", "values": [14.9, 8.1], "color": "muted"},
                                    {"name": "Vision + EMG", "values": [9.6, 7.1]}],
                         "number_format": "0.0\"°\""},
-              "caption": "Joint angle MAE, lower is better"}]},
+              "caption": "Joint angle MAE, lower is better"}],
+   "notes": "【这页讲】遮挡时融合把误差降了 36%（14.9° → 9.6°），没遮挡时也略好（8.1° → 7.1°）。"},
   {"type": "content", "title": "Demo: fusion under occlusion", "layout": "split",
    "subtitle": "The fused hand keeps all five fingers when vision loses them",
-   "bullets": ["Watch the index finger during the grasp"],
-   "media": [{"path": "/abs/path/demo.mp4"}]},
+   "media": [{"path": "/abs/path/demo.mp4", "caption": "Watch the index finger during the grasp"}]},
   {"type": "statement", "title": "Key result", "number": "36%",
    "text": "Lower occluded error when EMG joins the camera"},
   {"type": "todo", "projects": [{"name": "Vision-EMG", "items": ["Multi-subject collection by 11.05"]}]}
@@ -245,6 +277,18 @@ Use absolute media paths unless the files sit next to the spec. Don't copy the u
 around; the builder embeds them into the .pptx. A slide whose block is short sits at the top of
 the content area; give it `"valign": "middle"` when that leaves a large empty band below.
 
+**Show the outline before building.** For a new deck, or when slides were added or reordered, run
+
+```bash
+$SKILL_PY <this skill>/scripts/build_deck.py <meeting folder>/deck_spec.json --outline
+```
+
+It builds nothing: it prints each slide's form, title, message line and word count, the deck's
+median, and the warnings a build would give. Fix the warnings, then show the user the slide list
+and the count, and wait for their go-ahead or changes before building. Read in order, the message
+lines should be the story they mean to tell. Skip this for a small edit to a deck they already
+approved, or when they asked for the file straight away.
+
 ## Step 4 — Build
 
 ```bash
@@ -266,6 +310,12 @@ leaves the deck already at the output path as it was. **Act on every warning**:
 | table taller than the space | Turn it into a chart, or split the rows across two slides. |
 | non-English text | Translate it. |
 | N bullets / bullet over N words / item over N words | Cut to the key sentence, move detail to the speaker `notes`, or split the slide. |
+| bullets beside a figure, video or chart | Move them into the notes: the subtitle says the point, a caption says where to look. |
+| N words on the slide / median of N words | Let the visual and the subtitle carry it: drop bullets beside visuals first, then shorten subtitles and captions; move the explanation to the notes, or split a slide that says two things. |
+| no subtitle | Write the slide's takeaway as one plain sentence. |
+| caption over N words | Say only where to look; the rest goes in the notes. |
+| '…' narrates the slide | Delete the phrase and say the point itself. |
+| the notes use the stock phrase … | Rewrite the sentence around the method, number or figure it is about. |
 | no figure, demo video or chart | Ask the user for a visual or make a chart from the numbers; `"text_only": true` only for a genuine discussion slide. |
 | paper: missing the pipeline figure / problem / approach / novelty / limitations | Ask the user for it — don't write it yourself. |
 | paper: N novelty or limitations / point over N words | Keep the two points that matter most, or shorten. |
@@ -277,8 +327,14 @@ leaves the deck already at the output path as it was. **Act on every warning**:
 | "tone" is gone | Drop the key: every content page is white now; for a demo, try `"layout": "split"`. |
 | the classic theme's cover (closing slide) has no place for an image | Drop `image`, or offer `paper` if the user wants a cover photo. |
 | the split layout needs a photo or video and no table / shows one photo or video | Give it exactly one photo or video, and move the table to its own slide. |
+| grid … is not [columns, rows] / highlight … is not a panel number / N values for N panels | Count the video's panels (left to right, top to bottom) and fix `grid`, `highlight` or `values`. |
+| "highlight" and "values" need "grid" / … are for a video or figure made of panels | Add `"grid": [columns, rows]` to the video; on a chart, put `highlight` inside `chart`. |
+| values go beside the panels only when the video or figure is alone / beside a grid of one or two columns | Move the other media or the bullets to their own slide, or show the numbers in a chart beside the video instead. |
+| "numbers" needs … / numbers take the place of bullets / the number … points at panel N | Give `numbers` its items and the video they describe; drop the bullets; point `panel` at a panel of the video's `grid`. |
 | agenda has no items and the deck has no section slides | Add `section` slides (or `items`); or drop the agenda — a one-part deck needs none. |
-| statement / column / step text over N words, N columns, N points | Cut to the key words, or split the slide. |
+| agenda: one outline only lists what is coming | Drop it. In a formal talk you may open each part with it instead of a section slide, `current` set. |
+| closing slide has no title / says nothing the audience keeps | Make the title the talk's one takeaway; keep "Thank you" only if the user asks for it. |
+| statement / column / step text over N words, N columns, N points, more than one line | Cut to the key words, or split the slide. |
 | series … color … barely shows / text color … is hard to read | Drop the `color` so the theme picks it, or use a palette word (`muted`, `accent`). |
 | section title too long / section subtitle over N words | Shorten it to the part's name and one short line. |
 | the cover says … but the spec sits in … | Ask which date is right; fix the cover date, or move the spec to the right meeting folder. |
