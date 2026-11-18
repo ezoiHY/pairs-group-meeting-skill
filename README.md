@@ -234,7 +234,7 @@ instead of bullets from
 ### Codex
 
 ```bash
-git clone https://github.com/ezoiHY/pairs-group-meeting-skill.git
+git clone https://github.com/pairslab/pairs-group-meeting-skill.git
 mkdir -p ~/.agents/skills
 ln -s "$PWD/pairs-group-meeting-skill/codex/pairs-group-meeting" ~/.agents/skills/pairs-group-meeting
 ```
@@ -248,14 +248,14 @@ and saves it in `~/.config/pairs-group-meeting/config.json` (see below).
 **As a plugin** (in Claude Code):
 
 ```
-/plugin marketplace add ezoiHY/pairs-group-meeting-skill
+/plugin marketplace add pairslab/pairs-group-meeting-skill
 /plugin install pairs-group-meeting@pairs-lab
 ```
 
 **Or as a personal skill**, which is easier to edit:
 
 ```bash
-git clone https://github.com/ezoiHY/pairs-group-meeting-skill.git
+git clone https://github.com/pairslab/pairs-group-meeting-skill.git
 ln -s "$PWD/pairs-group-meeting-skill/skills/pairs-group-meeting" ~/.claude/skills/pairs-group-meeting
 ```
 
